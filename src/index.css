@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@theme {
+  --color-amber-50: #fffbeb;
+  --color-amber-100: #fef3c7;
+  --color-amber-200: #fde68a;
+  --color-amber-300: #fcd34d;
+  --color-amber-400: #fbbf24;
+  --color-amber-500: #f59e0b;
+  --color-amber-600: #d97706;
+  --color-amber-700: #b45309;
+  --color-amber-800: #92400e;
+  --color-amber-900: #78350f;
+  --color-amber-950: #451a03;
+
+  --color-surface-0: #0a0a0b;
+  --color-surface-1: #111113;
+  --color-surface-2: #1a1a1e;
+  --color-surface-3: #232328;
+  --color-surface-4: #2c2c33;
+
+  --color-yes: #22c55e;
+  --color-no: #ef4444;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-surface-4) transparent;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-surface-0);
+    font-family: var(--font-sans);
+  }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+}
+
+@layer components {
+  .glass {
+    background: rgba(17, 17, 19, 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .btn-primary {
+    @apply bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold px-4 py-2 rounded-lg transition-colors;
+  }
+
+  .btn-secondary {
+    @apply bg-surface-3 hover:bg-surface-4 text-gray-100 font-medium px-4 py-2 rounded-lg transition-colors border border-white/5;
+  }
+
+  .btn-yes {
+    @apply bg-yes/15 hover:bg-yes/25 text-yes font-semibold px-4 py-2 rounded-lg transition-colors border border-yes/20;
+  }
+
+  .btn-no {
+    @apply bg-no/15 hover:bg-no/25 text-no font-semibold px-4 py-2 rounded-lg transition-colors border border-no/20;
+  }
+
+  .card {
+    @apply bg-surface-1 border border-white/5 rounded-xl;
+  }
+
+  .input {
+    @apply bg-surface-2 border border-white/10 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/25 transition-colors;
+  }
+}
