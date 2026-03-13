@@ -70,26 +70,34 @@ class HyperliquidWebSocket {
   }
 
   private dispatch(channel: string, data: unknown) {
+    const payload = data as Record<string, unknown> | undefined
     for (const [, sub] of this.subscriptions) {
-      if (this.channelMatches(channel, sub.subscription)) {
+      if (this.channelMatches(channel, payload, sub.subscription)) {
         sub.handler(data)
       }
     }
   }
 
-  private channelMatches(channel: string, subscription: WsSubscription): boolean {
-    // Channel names match subscription types
-    if (channel === subscription.type) return true
-    // Some channels come as specific names
-    if (channel === 'l2Book' && subscription.type === 'l2Book') return true
-    if (channel === 'trades' && subscription.type === 'trades') return true
-    if (channel === 'bbo' && subscription.type === 'bbo') return true
-    if (channel === 'candle' && subscription.type === 'candle') return true
-    if (channel === 'allMids' && subscription.type === 'allMids') return true
-    if (channel === 'orderUpdates' && subscription.type === 'orderUpdates') return true
-    if (channel === 'userFills' && subscription.type === 'userFills') return true
-    if (channel === 'spotState' && subscription.type === 'spotState') return true
-    return false
+  private channelMatches(
+    channel: string,
+    data: Record<string, unknown> | undefined,
+    subscription: WsSubscription
+  ): boolean {
+    if (channel !== subscription.type) return false
+
+    // For coin-specific channels, also match the coin field
+    if (subscription.coin && data) {
+      const dataCoin = (data as Record<string, unknown>).coin
+      if (dataCoin && dataCoin !== subscription.coin) return false
+    }
+
+    // For user-specific channels, match user field
+    if (subscription.user && data) {
+      const dataUser = (data as Record<string, unknown>).user
+      if (dataUser && dataUser !== subscription.user) return false
+    }
+
+    return true
   }
 
   subscribe(id: string, subscription: WsSubscription, handler: MessageHandler) {

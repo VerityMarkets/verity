@@ -1,10 +1,62 @@
+import { useMemo } from 'react'
 import { useMarketStore } from '@/stores/marketStore'
 import { MarketCard } from './MarketCard'
+import type { Category } from './CategoryBar'
 
-export function MarketList() {
+/** Parse the expiry string (YYYYMMDD-HHMM) into a Date. */
+function parseExpiry(expiry: string): Date | null {
+  if (!expiry || expiry.length < 13) return null
+  const y = parseInt(expiry.slice(0, 4), 10)
+  const mo = parseInt(expiry.slice(4, 6), 10) - 1
+  const d = parseInt(expiry.slice(6, 8), 10)
+  const h = parseInt(expiry.slice(9, 11), 10)
+  const mi = parseInt(expiry.slice(11, 13), 10)
+  return new Date(Date.UTC(y, mo, d, h, mi))
+}
+
+export function MarketList({ category = 'Trending' }: { category?: Category }) {
   const markets = useMarketStore((s) => s.markets)
   const loading = useMarketStore((s) => s.loading)
   const error = useMarketStore((s) => s.error)
+  const getYesPrice = useMarketStore((s) => s.getYesPrice)
+
+  const filtered = useMemo(() => {
+    let list = [...markets]
+
+    switch (category) {
+      case 'Trending':
+        // Sort by price deviation from 0.5 (most opinionated = most active)
+        list.sort((a, b) => {
+          const devA = Math.abs(getYesPrice(a) - 0.5)
+          const devB = Math.abs(getYesPrice(b) - 0.5)
+          return devB - devA
+        })
+        break
+
+      case 'New': {
+        const now = Date.now()
+        const dayMs = 24 * 60 * 60 * 1000
+        list = list.filter((m) => {
+          const exp = parseExpiry(m.expiry)
+          // Markets expiring in the next 24h are considered "new"
+          return exp && exp.getTime() > now && exp.getTime() - now < dayMs
+        })
+        break
+      }
+
+      case 'Sports':
+        list = list.filter((m) => m.class === 'sports')
+        break
+
+      case 'Crypto':
+        list = list.filter(
+          (m) => m.class === 'crypto' || m.class === 'priceBinary'
+        )
+        break
+    }
+
+    return list
+  }, [markets, category, getYesPrice])
 
   if (loading) {
     return (
@@ -29,12 +81,12 @@ export function MarketList() {
     )
   }
 
-  if (markets.length === 0) {
+  if (filtered.length === 0) {
     return (
       <div className="card p-8 text-center">
-        <p className="text-gray-400 text-sm">No markets available yet</p>
+        <p className="text-gray-400 text-sm">No markets in this category</p>
         <p className="text-gray-500 text-xs mt-1">
-          Markets will appear when HIP-4 launches
+          Try a different filter or check back soon
         </p>
       </div>
     )
@@ -42,7 +94,7 @@ export function MarketList() {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {markets.map((market) => (
+      {filtered.map((market) => (
         <MarketCard key={market.outcomeId} market={market} />
       ))}
     </div>

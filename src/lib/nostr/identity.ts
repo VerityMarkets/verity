@@ -5,30 +5,45 @@ import { schnorr } from '@noble/curves/secp256k1.js'
 
 const SIGN_MESSAGE = 'Sign to generate your Verity chat identity'
 const HKDF_SALT = 'verity-nostr-identity'
+const STORAGE_PREFIX = 'verity-chat-sig:'
+
+function deriveFromSignature(signature: string): { privkey: Uint8Array; pubkey: string } {
+  const sigBytes = hexToBytes(signature.startsWith('0x') ? signature.slice(2) : signature)
+  const seed = sha256(sigBytes)
+  const salt = new TextEncoder().encode(HKDF_SALT)
+  const info = new TextEncoder().encode('nostr-privkey')
+  const privkeyBytes = hkdf(sha256, seed, salt, info, 32)
+  const pubkey = bytesToHex(schnorr.getPublicKey(privkeyBytes))
+  return { privkey: privkeyBytes, pubkey }
+}
+
+/**
+ * Try to restore a Nostr keypair from a cached signature in localStorage.
+ * Returns null if no cached signature exists for this address.
+ */
+export function restoreNostrKeypair(address: string): { privkey: Uint8Array; pubkey: string } | null {
+  const sig = localStorage.getItem(STORAGE_PREFIX + address.toLowerCase())
+  if (!sig) return null
+  try {
+    return deriveFromSignature(sig)
+  } catch {
+    localStorage.removeItem(STORAGE_PREFIX + address.toLowerCase())
+    return null
+  }
+}
 
 /**
  * Derive a Nostr keypair from an EVM wallet signature.
  * NIP-111 pattern: sign a deterministic message, hash it, derive via HKDF.
+ * Caches the signature in localStorage for future sessions.
  */
 export async function deriveNostrKeypair(
-  signMessage: (message: string) => Promise<string>
+  signMessage: (message: string) => Promise<string>,
+  address: string
 ): Promise<{ privkey: Uint8Array; pubkey: string }> {
-  // 1. Sign the deterministic message with EVM wallet
   const signature = await signMessage(SIGN_MESSAGE)
-
-  // 2. Hash the signature to get seed material
-  const sigBytes = hexToBytes(signature.startsWith('0x') ? signature.slice(2) : signature)
-  const seed = sha256(sigBytes)
-
-  // 3. Derive 32 bytes via HKDF
-  const salt = new TextEncoder().encode(HKDF_SALT)
-  const info = new TextEncoder().encode('nostr-privkey')
-  const privkeyBytes = hkdf(sha256, seed, salt, info, 32)
-
-  // 4. Get the public key (x-only for Nostr/Schnorr)
-  const pubkey = bytesToHex(schnorr.getPublicKey(privkeyBytes))
-
-  return { privkey: privkeyBytes, pubkey }
+  localStorage.setItem(STORAGE_PREFIX + address.toLowerCase(), signature)
+  return deriveFromSignature(signature)
 }
 
 /**

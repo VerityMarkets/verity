@@ -1,9 +1,20 @@
 import { Link, useLocation } from 'react-router-dom'
+import { useAccount } from 'wagmi'
 import { useChatStore } from '@/stores/chatStore'
+import { usePortfolioStore } from '@/stores/portfolioStore'
+import { useMarketStore } from '@/stores/marketStore'
 
 export function MobileNav() {
   const location = useLocation()
   const toggleChat = useChatStore((s) => s.toggleChat)
+  const { isConnected } = useAccount()
+
+  const spotBalances = usePortfolioStore((s) => s.spotBalances)
+  const quoteCoin = useMarketStore((s) => s.outcomeQuoteCoin) || 'USDC'
+
+  const cashValue =
+    (spotBalances['USDC'] ?? 0) +
+    (quoteCoin !== 'USDC' ? (spotBalances[quoteCoin] ?? 0) : 0)
 
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 glass border-t border-white/5 z-50">
@@ -19,7 +30,9 @@ export function MobileNav() {
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
           </svg>
-          <span className="text-[10px]">Portfolio</span>
+          <span className="text-[10px]">
+            {isConnected && cashValue > 0 ? `$${cashValue.toFixed(0)}` : 'Portfolio'}
+          </span>
         </MobileNavLink>
 
         <button

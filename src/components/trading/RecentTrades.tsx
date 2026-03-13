@@ -14,10 +14,7 @@ export function RecentTrades({ coin }: { coin: string }) {
   }, [coin])
 
   return (
-    <div className="card p-4">
-      <h3 className="text-sm font-semibold text-gray-300 mb-3">Recent Trades</h3>
-
-      <div className="space-y-0.5">
+    <div className="space-y-0.5">
         <div className="grid grid-cols-3 text-[10px] text-gray-500 uppercase font-mono pb-1">
           <span>Price</span>
           <span className="text-right">Size</span>
@@ -49,7 +46,6 @@ export function RecentTrades({ coin }: { coin: string }) {
             )
           })
         )}
-      </div>
     </div>
   )
 }

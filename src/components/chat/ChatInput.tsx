@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useChatStore } from '@/stores/chatStore'
 
-export function ChatInput() {
+export function ChatInput({ marketTag }: { marketTag?: string }) {
   const [text, setText] = useState('')
   const sendMessage = useChatStore((s) => s.sendMessage)
   const [sending, setSending] = useState(false)
@@ -12,7 +12,7 @@ export function ChatInput() {
 
     setSending(true)
     try {
-      await sendMessage(text.trim())
+      await sendMessage(text.trim(), undefined, undefined, marketTag)
       setText('')
     } catch {
       // ignore
@@ -37,7 +37,7 @@ export function ChatInput() {
         className="btn-primary px-3 py-1.5 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12l7-7 7 7M12 5v14" />
         </svg>
       </button>
     </form>

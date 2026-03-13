@@ -1,8 +1,9 @@
+import { Link } from 'react-router-dom'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import { useMarketStore } from '@/stores/marketStore'
 import { parseToken } from '@/lib/hyperliquid/encoding'
 
-export function Positions() {
+export function Positions({ search = '' }: { search?: string }) {
   const balances = usePortfolioStore((s) => s.balances)
   const markets = useMarketStore((s) => s.markets)
   const mids = useMarketStore((s) => s.mids)
@@ -33,6 +34,14 @@ export function Positions() {
       }
     })
     .filter(Boolean)
+    .filter((pos) => {
+      if (!search || !pos) return true
+      const q = search.toLowerCase()
+      return (
+        pos.market.name.toLowerCase().includes(q) ||
+        pos.market.underlying.toLowerCase().includes(q)
+      )
+    })
 
   if (positions.length === 0) {
     return (
@@ -68,9 +77,13 @@ export function Positions() {
                   className="border-b border-white/3 hover:bg-surface-2/50 transition-colors"
                 >
                   <td className="px-4 py-3">
-                    <span className="text-sm text-gray-200 font-medium">
+                    <Link
+                      to={`/market/${pos.market.outcomeId}`}
+                      className="text-sm text-gray-200 hover:text-amber-400 transition-colors"
+                    >
+                      <span className="text-xs text-gray-500 font-mono mr-1.5">#{pos.market.outcomeId}</span>
                       {pos.market.underlying || pos.market.name}
-                    </span>
+                    </Link>
                   </td>
                   <td className="px-4 py-3">
                     <span

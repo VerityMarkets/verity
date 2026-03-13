@@ -120,9 +120,15 @@ class NostrClient {
     pubkey: string,
     marketTag?: string,
     parentId?: string,
-    parentPubkey?: string
+    parentPubkey?: string,
+    evmAddress?: string
   ): Promise<NostrRelayEvent> {
     const tags: string[][] = []
+
+    // Embed EVM address for display
+    if (evmAddress) {
+      tags.push(['evm', evmAddress])
+    }
 
     // Market scope tag
     if (marketTag) {

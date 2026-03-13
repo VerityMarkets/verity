@@ -20,7 +20,7 @@ interface ChatStore {
   setOpen: (open: boolean) => void
   subscribeChat: () => void
   unsubscribeChat: () => void
-  sendMessage: (content: string, parentId?: string, parentPubkey?: string) => Promise<void>
+  sendMessage: (content: string, parentId?: string, parentPubkey?: string, marketTag?: string) => Promise<void>
   reactToMessage: (eventId: string, eventPubkey: string) => Promise<void>
   getFilteredMessages: () => ChatMessage[]
 }
@@ -70,6 +70,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
         const parentId = event.tags.find((t) => t[0] === 'e')?.[1] ?? null
         const parentPubkey = event.tags.find((t) => t[0] === 'p')?.[1] ?? null
+        const evmAddress = event.tags.find((t) => t[0] === 'evm')?.[1] ?? undefined
 
         const msg: ChatMessage = {
           id: event.id,
@@ -81,6 +82,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           parentPubkey,
           reactions: 0,
           userReacted: false,
+          evmAddress,
         }
 
         set((state) => {
@@ -138,11 +140,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     nostrClient.unsubscribe('verity-reactions')
   },
 
-  sendMessage: async (content, parentId, parentPubkey) => {
-    const { nostrPrivkey, nostrPubkey, filter } = get()
+  sendMessage: async (content, parentId, parentPubkey, marketTagOverride) => {
+    const { nostrPrivkey, nostrPubkey, evmAddress, filter } = get()
     if (!nostrPrivkey || !nostrPubkey) return
 
-    const marketTag = filter !== 'global' ? filter : undefined
+    const marketTag = marketTagOverride ?? (filter !== 'global' ? filter : undefined)
 
     await nostrClient.publishComment(
       content,
@@ -150,7 +152,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       nostrPubkey,
       marketTag,
       parentId,
-      parentPubkey
+      parentPubkey,
+      evmAddress ?? undefined
     )
   },
 

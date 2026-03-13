@@ -16,14 +16,14 @@ export function MarketCard({ market }: { market: ParsedMarket }) {
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            {isRecurring && (
-              <span className="text-[10px] font-mono text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
-                {market.period}
-              </span>
-            )}
             <span className="text-xs text-gray-500 font-mono">
               #{market.outcomeId}
             </span>
+            {isRecurring && (
+              <span className="text-[10px] font-semibold text-gray-400 bg-surface-3 px-1.5 rounded leading-4">
+                {market.period}
+              </span>
+            )}
           </div>
 
           <h3 className="text-sm font-semibold text-gray-100 group-hover:text-amber-400 transition-colors leading-snug">

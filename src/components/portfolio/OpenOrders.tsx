@@ -1,12 +1,15 @@
+import { Link } from 'react-router-dom'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import { useMarketStore } from '@/stores/marketStore'
 import { useAccount, useWalletClient } from 'wagmi'
 import { parseCoin } from '@/lib/hyperliquid/encoding'
 import { signL1Action } from '@/lib/hyperliquid/signing'
 import { postExchange } from '@/lib/hyperliquid/api'
+import { DEV_MODE } from '@/config'
+import { getDevSigner } from '@/lib/devWallet'
 import toast from 'react-hot-toast'
 
-export function OpenOrders() {
+export function OpenOrders({ search = '' }: { search?: string }) {
   const openOrders = usePortfolioStore((s) => s.openOrders)
   const fetchPortfolio = usePortfolioStore((s) => s.fetchPortfolio)
   const markets = useMarketStore((s) => s.markets)
@@ -14,7 +17,11 @@ export function OpenOrders() {
   const { data: walletClient } = useWalletClient()
 
   async function cancelOrder(oid: number, coin: string) {
-    if (!walletClient || !address) return
+    const signer = walletClient ?? (DEV_MODE ? getDevSigner() : null)
+    if (!signer || !address) {
+      toast.error('Wallet not connected')
+      return
+    }
 
     const parsed = parseCoin(coin)
     if (!parsed) return
@@ -28,17 +35,31 @@ export function OpenOrders() {
       }
 
       const nonce = Date.now()
-      const sig = await signL1Action(walletClient, action, nonce)
+      const sig = await signL1Action(signer, action, nonce)
 
       await postExchange({ action, nonce, signature: sig })
       toast.success('Order cancelled')
       if (address) fetchPortfolio(address)
     } catch (err) {
-      toast.error('Failed to cancel order')
+      toast.error((err as Error).message.slice(0, 80))
     }
   }
 
-  if (openOrders.length === 0) {
+  const filteredOrders = openOrders.filter((order) => {
+    if (!search) return true
+    const parsed = parseCoin(order.coin)
+    const market = parsed
+      ? markets.find((m) => m.outcomeId === parsed.outcomeId)
+      : null
+    if (!market) return true
+    const q = search.toLowerCase()
+    return (
+      market.name.toLowerCase().includes(q) ||
+      market.underlying.toLowerCase().includes(q)
+    )
+  })
+
+  if (filteredOrders.length === 0) {
     return (
       <div className="card p-6 text-center">
         <p className="text-gray-400 text-sm">No open orders</p>
@@ -53,21 +74,23 @@ export function OpenOrders() {
           <thead>
             <tr className="text-[10px] text-gray-500 uppercase font-mono border-b border-white/5">
               <th className="text-left px-4 py-3">Market</th>
+              <th className="text-left px-4 py-3">Action</th>
               <th className="text-left px-4 py-3">Side</th>
               <th className="text-right px-4 py-3">Price</th>
               <th className="text-right px-4 py-3">Size</th>
-              <th className="text-right px-4 py-3">Action</th>
+              <th className="text-right px-4 py-3">Total</th>
+              <th className="text-right px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
-            {openOrders.map((order) => {
+            {filteredOrders.map((order) => {
               const parsed = parseCoin(order.coin)
               const market = parsed
                 ? markets.find((m) => m.outcomeId === parsed.outcomeId)
                 : null
               const sideName = market && parsed
                 ? market.sideNames[parsed.side] ?? 'Unknown'
-                : order.coin
+                : parsed ? (parsed.side === 0 ? 'Yes' : 'No') : order.coin
               const isBuy = order.side === 'B'
 
               return (
@@ -76,15 +99,30 @@ export function OpenOrders() {
                   className="border-b border-white/3 hover:bg-surface-2/50 transition-colors"
                 >
                   <td className="px-4 py-3 text-sm text-gray-200">
-                    {market?.underlying || market?.name || order.coin}
+                    {parsed ? (
+                      <Link
+                        to={`/market/${parsed.outcomeId}`}
+                        className="hover:text-amber-400 transition-colors"
+                      >
+                        <span className="text-xs text-gray-500 font-mono mr-1.5">#{parsed.outcomeId}</span>
+                        {market ? (market.underlying || market.name) : `Outcome ${parsed.outcomeId}`}
+                      </Link>
+                    ) : (
+                      order.coin
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-200">
+                    {isBuy ? 'Buy' : 'Sell'}
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`text-xs font-semibold ${
-                        isBuy ? 'text-yes' : 'text-no'
+                      className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                        parsed && parsed.side === 0
+                          ? 'bg-yes/10 text-yes'
+                          : 'bg-no/10 text-no'
                       }`}
                     >
-                      {isBuy ? 'Buy' : 'Sell'} {sideName}
+                      {sideName}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right text-sm text-gray-200 font-mono">
@@ -93,10 +131,13 @@ export function OpenOrders() {
                   <td className="px-4 py-3 text-right text-sm text-gray-200 font-mono">
                     {parseFloat(order.sz).toFixed(0)}
                   </td>
+                  <td className="px-4 py-3 text-right text-sm text-gray-200 font-mono">
+                    ${(parseFloat(order.limitPx) * parseFloat(order.sz)).toFixed(2)}
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <button
                       onClick={() => cancelOrder(order.oid, order.coin)}
-                      className="text-xs text-red-400 hover:text-red-300 font-medium transition-colors"
+                      className="text-xs text-red-400 hover:text-red-300 font-medium transition-colors cursor-pointer"
                     >
                       Cancel
                     </button>

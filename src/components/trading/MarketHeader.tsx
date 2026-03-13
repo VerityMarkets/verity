@@ -1,13 +1,28 @@
 import { useMarketStore } from '@/stores/marketStore'
+import { useOrderBookStore } from '@/stores/orderbookStore'
 import { MarketTimer } from '../markets/MarketTimer'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
 
-export function MarketHeader({ market }: { market: ParsedMarket }) {
-  const getYesPrice = useMarketStore((s) => s.getYesPrice)
-  const getNoPrice = useMarketStore((s) => s.getNoPrice)
-  const yesPrice = getYesPrice(market)
-  const noPrice = getNoPrice(market)
+interface MarketHeaderProps {
+  market: ParsedMarket
+  settled?: boolean
+  settlementResult?: 'yes' | 'no' | null
+}
+
+export function MarketHeader({ market, settled, settlementResult }: MarketHeaderProps) {
+  const mids = useMarketStore((s) => s.mids)
+  const books = useOrderBookStore((s) => s.books)
+
+  // Use mid from order book (midpoint of best bid/ask), fallback to allMids
+  const yesMid = mids[market.yesCoin] ? parseFloat(mids[market.yesCoin]) : 0.5
+  const noMid = mids[market.noCoin] ? parseFloat(mids[market.noCoin]) : 0.5
+
+  // For settled markets, show final prices
+  const yesPrice = settled ? (settlementResult === 'yes' ? 1 : 0) : yesMid
+  const noPrice = settled ? (settlementResult === 'no' ? 1 : 0) : noMid
+
   const yesPct = Math.round(yesPrice * 100)
+  const noPct = Math.round(noPrice * 100)
 
   const isRecurring = market.class === 'priceBinary'
 
@@ -16,14 +31,19 @@ export function MarketHeader({ market }: { market: ParsedMarket }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            {isRecurring && (
-              <span className="text-[10px] font-mono text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
-                {market.period}
-              </span>
-            )}
             <span className="text-xs text-gray-500 font-mono">
               #{market.outcomeId}
             </span>
+            {settled && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-yes/15 text-yes">
+                Resolved
+              </span>
+            )}
+            {isRecurring && !settled && (
+              <span className="text-[10px] font-semibold text-gray-400 bg-surface-3 px-1.5 rounded leading-4">
+                {market.period}
+              </span>
+            )}
           </div>
 
           <h1 className="text-lg font-bold text-gray-100">
@@ -52,7 +72,7 @@ export function MarketHeader({ market }: { market: ParsedMarket }) {
           <div className="w-px h-10 bg-white/10" />
           <div className="text-center">
             <div className="text-2xl font-bold text-no">
-              {Math.round(noPrice * 100)}¢
+              {noPct}¢
             </div>
             <div className="text-[10px] text-gray-500 uppercase">
               {market.sideNames[1]}
@@ -71,7 +91,11 @@ export function MarketHeader({ market }: { market: ParsedMarket }) {
             />
           </div>
         </div>
-        {market.expiry && <MarketTimer expiry={market.expiry} />}
+        {settled ? (
+          <span className="text-xs text-gray-500 font-mono">Settled</span>
+        ) : (
+          market.expiry && <MarketTimer expiry={market.expiry} />
+        )}
       </div>
     </div>
   )

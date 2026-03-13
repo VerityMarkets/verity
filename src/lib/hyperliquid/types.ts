@@ -43,6 +43,29 @@ export interface ParsedMarket {
   noAssetId: number
 }
 
+// --- Spot Meta ---
+
+export interface SpotToken {
+  name: string
+  index: number
+  szDecimals: number
+  weiDecimals: number
+  tokenId: string
+  isCanonical: boolean
+}
+
+export interface SpotPair {
+  tokens: [number, number]
+  name: string
+  index: number
+  isCanonical: boolean
+}
+
+export interface SpotMeta {
+  universe: SpotPair[]
+  tokens: SpotToken[]
+}
+
 // --- Price Data ---
 
 export type AllMids = Record<string, string>

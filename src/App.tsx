@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { Routes, Route } from 'react-router-dom'
-import { WagmiProvider, http } from 'wagmi'
+import { WagmiProvider, http, useConnect, useAccount } from 'wagmi'
+import { injected } from 'wagmi/connectors'
 import { arbitrum, arbitrumSepolia } from 'wagmi/chains'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
@@ -10,7 +12,8 @@ import {
 import '@rainbow-me/rainbowkit/styles.css'
 import { Toaster } from 'react-hot-toast'
 
-import { IS_TESTNET } from './config'
+import { IS_TESTNET, DEV_MODE } from './config'
+import { usePortfolioStore } from './stores/portfolioStore'
 import { AppShell } from './components/layout/AppShell'
 import { HomePage } from './pages/HomePage'
 import { MarketPage } from './pages/MarketPage'
@@ -27,6 +30,40 @@ const config = getDefaultConfig({
 
 const queryClient = new QueryClient()
 
+/** In dev mode, auto-connect the injected dev wallet — no clicks needed. */
+function DevAutoConnect() {
+  const { connect } = useConnect()
+  const { isConnected } = useAccount()
+
+  useEffect(() => {
+    if (!DEV_MODE || isConnected) return
+    connect({ connector: injected({ target: 'metaMask' }) })
+  }, [connect, isConnected])
+
+  return null
+}
+
+/** Subscribe to portfolio updates once when wallet connects. */
+function PortfolioSync() {
+  const { address } = useAccount()
+  const fetchPortfolio = usePortfolioStore((s) => s.fetchPortfolio)
+  const subscribePortfolio = usePortfolioStore((s) => s.subscribePortfolio)
+  const unsubscribePortfolio = usePortfolioStore((s) => s.unsubscribePortfolio)
+
+  useEffect(() => {
+    if (!address) return
+    fetchPortfolio(address)
+    subscribePortfolio(address)
+    const interval = setInterval(() => fetchPortfolio(address), 15_000)
+    return () => {
+      clearInterval(interval)
+      unsubscribePortfolio()
+    }
+  }, [address])
+
+  return null
+}
+
 export default function App() {
   return (
     <WagmiProvider config={config}>
@@ -39,6 +76,8 @@ export default function App() {
             fontStack: 'system',
           })}
         >
+          {DEV_MODE && <DevAutoConnect />}
+          <PortfolioSync />
           <AppShell>
             <Routes>
               <Route path="/" element={<HomePage />} />

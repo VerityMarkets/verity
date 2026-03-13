@@ -2,6 +2,7 @@ import { API_URL } from '@/config'
 import type {
   OutcomeMeta,
   AllMids,
+  SpotMeta,
   L2Book,
   Trade,
   Candle,
@@ -30,11 +31,32 @@ export async function postExchange(body: Record<string, unknown>): Promise<unkno
     const text = await res.text()
     throw new Error(`Exchange error: ${res.status} - ${text}`)
   }
-  return res.json()
+  const data = await res.json()
+
+  // Hyperliquid returns { status: "ok" | "err", response: ... }
+  if (data.status === 'err') {
+    throw new Error(data.response || 'Unknown exchange error')
+  }
+
+  // For order responses, check individual order statuses
+  if (data.response?.type === 'order' && data.response?.data?.statuses) {
+    const statuses = data.response.data.statuses
+    for (const s of statuses) {
+      if (s.error) {
+        throw new Error(s.error)
+      }
+    }
+  }
+
+  return data
 }
 
 export function fetchOutcomeMeta(): Promise<OutcomeMeta> {
   return postInfo<OutcomeMeta>({ type: 'outcomeMeta' })
+}
+
+export function fetchSpotMeta(): Promise<SpotMeta> {
+  return postInfo<SpotMeta>({ type: 'spotMeta' })
 }
 
 export function fetchAllMids(): Promise<AllMids> {

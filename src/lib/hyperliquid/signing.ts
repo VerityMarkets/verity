@@ -140,6 +140,51 @@ export async function signApproveBuilderFee(
   return splitSignature(signature)
 }
 
+// --- Withdraw signing (user-signed action) ---
+
+const WITHDRAW_TYPES = {
+  'HyperliquidTransaction:Withdraw': [
+    { name: 'hyperliquidChain', type: 'string' },
+    { name: 'destination', type: 'string' },
+    { name: 'amount', type: 'string' },
+    { name: 'time', type: 'uint64' },
+  ],
+} as const
+
+/** Sign a withdraw3 action to bridge USDC back to Arbitrum. */
+export async function signWithdraw3(
+  walletClient: {
+    signTypedData: (args: {
+      domain: typeof USER_SIGNED_DOMAIN
+      types: typeof WITHDRAW_TYPES
+      primaryType: 'HyperliquidTransaction:Withdraw'
+      message: {
+        hyperliquidChain: string
+        destination: string
+        amount: string
+        time: bigint
+      }
+    }) => Promise<`0x${string}`>
+  },
+  destination: string,
+  amount: string,
+  nonce: number
+): Promise<{ r: `0x${string}`; s: `0x${string}`; v: number }> {
+  const signature = await walletClient.signTypedData({
+    domain: USER_SIGNED_DOMAIN,
+    types: WITHDRAW_TYPES,
+    primaryType: 'HyperliquidTransaction:Withdraw',
+    message: {
+      hyperliquidChain: IS_TESTNET ? 'Testnet' : 'Mainnet',
+      destination,
+      amount,
+      time: BigInt(nonce),
+    },
+  })
+
+  return splitSignature(signature)
+}
+
 // --- Helpers ---
 
 function splitSignature(sig: `0x${string}`): {

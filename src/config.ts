@@ -1,5 +1,8 @@
 export const IS_TESTNET = true
 
+// Dev mode: inject a local wallet (no browser extension needed)
+export const DEV_MODE = IS_TESTNET && import.meta.env.DEV
+
 export const API_URL = IS_TESTNET
   ? 'https://api.hyperliquid-testnet.xyz'
   : 'https://api.hyperliquid.xyz'
