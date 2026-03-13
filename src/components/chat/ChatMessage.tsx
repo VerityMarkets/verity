@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
 import { useChatStore } from '@/stores/chatStore'
 import { useChatBalanceStore } from '@/stores/chatBalanceStore'
-import { chatGroupLabel, isGroupKey } from '@/lib/chatGroup'
+import { chatGroupLabel, isGroupKey, findMarketForGroup } from '@/lib/chatGroup'
+import { useMarketStore } from '@/stores/marketStore'
 import type { ChatMessage as ChatMessageType } from '@/lib/nostr/types'
 import { Hashicon } from './Hashicon'
 
@@ -50,6 +51,7 @@ export function ChatMessage({
   const reactToMessage = useChatStore((s) => s.reactToMessage)
   const nostrPubkey = useChatStore((s) => s.nostrPubkey)
   const getChatBalance = useChatBalanceStore((s) => s.getBalance)
+  const markets = useMarketStore((s) => s.markets)
 
   const isCurrentMarket = !!(currentMarketId && message.marketTag === currentMarketId)
   const showMarketTag = message.marketTag && message.marketTag !== activeFilter
@@ -89,18 +91,24 @@ export function ChatMessage({
             <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1 rounded">
               {chatGroupLabel(message.marketTag!)}
             </span>
-          ) : isGroupKey(message.marketTag!) ? (
-            <span className="text-[10px] text-amber-500/50 bg-amber-500/5 px-1 rounded">
-              {chatGroupLabel(message.marketTag!)}
-            </span>
-          ) : (
-            <Link
-              to={`/market/${message.marketTag}`}
-              className="text-[10px] text-amber-500/50 bg-amber-500/5 px-1 rounded cursor-pointer hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
-            >
-              {chatGroupLabel(message.marketTag!)}
-            </Link>
-          )
+          ) : (() => {
+            const tag = message.marketTag!
+            const linkId = isGroupKey(tag)
+              ? findMarketForGroup(tag, markets)
+              : Number(tag)
+            return linkId != null ? (
+              <Link
+                to={`/market/${linkId}`}
+                className="text-[10px] text-amber-500/50 bg-amber-500/5 px-1 rounded cursor-pointer hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+              >
+                {chatGroupLabel(tag)}
+              </Link>
+            ) : (
+              <span className="text-[10px] text-amber-500/50 bg-amber-500/5 px-1 rounded">
+                {chatGroupLabel(tag)}
+              </span>
+            )
+          })()
         )}
         {positionBadge && (
           <span className={`text-[10px] font-semibold px-1.5 rounded-full leading-4 ${positionBadge.color}`}>

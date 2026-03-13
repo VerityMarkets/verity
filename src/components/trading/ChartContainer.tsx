@@ -141,7 +141,7 @@ function ProbabilityHeader({
             isExpired={isExpired}
           />
         )}
-        <VerityWordmark className="h-5 text-gray-600 mr-8" mono />
+        <VerityWordmark className="h-7 text-gray-600 mr-8" mono />
       </div>
     </div>
   )

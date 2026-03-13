@@ -16,6 +16,12 @@ const PING_PERIOD = 2000 // ping every 2s
 const PING_DURATION = 1000 // ping animation lasts 1s
 const ARROW_PULSE_PERIOD = 1500 // pulsating arrow cycle
 
+/** Ease-out cubic: starts fast, decelerates to stop */
+function easeOut(t: number): number {
+  const t1 = 1 - t
+  return 1 - t1 * t1 * t1
+}
+
 // ─── Drawing helpers ───────────────────────────────────────────────────────────
 
 /** Calculate decimal places needed to show 0.01% moves for a given price */
@@ -51,74 +57,34 @@ function roundToMultiple(min: number, max: number, multiple: number) {
   }
 }
 
-/**
- * Monotone cubic Hermite interpolation (Fritsch-Carlson method).
- * Guarantees no overshooting between data points — the curve never reverses.
- * Returns an array of cubic bezier control point pairs for each segment.
- */
-function getMonotoneCubicControlPoints(
-  points: { x: number; y: number }[],
-): { cp1x: number; cp1y: number; cp2x: number; cp2y: number }[] {
-  const n = points.length
-  if (n < 2) return []
-
-  // Step 1: compute slopes (deltas) and intervals
-  const dx: number[] = []
-  const dy: number[] = []
-  const m: number[] = [] // tangent slopes at each point
-
-  for (let i = 0; i < n - 1; i++) {
-    dx.push(points[i + 1].x - points[i].x)
-    dy.push(points[i + 1].y - points[i].y)
-  }
-
-  const slopes: number[] = []
-  for (let i = 0; i < dx.length; i++) {
-    slopes.push(dx[i] === 0 ? 0 : dy[i] / dx[i])
-  }
-
-  // Step 2: compute initial tangents using averages of adjacent slopes
-  m.push(slopes[0])
-  for (let i = 1; i < n - 1; i++) {
-    // If slopes change sign, tangent = 0 (local extremum)
-    if (slopes[i - 1] * slopes[i] <= 0) {
-      m.push(0)
-    } else {
-      m.push((slopes[i - 1] + slopes[i]) / 2)
-    }
-  }
-  m.push(slopes[slopes.length - 1])
-
-  // Step 3: Fritsch-Carlson monotonicity correction
-  for (let i = 0; i < slopes.length; i++) {
-    if (slopes[i] === 0) {
-      m[i] = 0
-      m[i + 1] = 0
+/** Catmull-Rom control points, x-clamped to prevent reversals on time-series */
+function getControlPoints(points: { x: number; y: number }[]) {
+  const cps: number[] = []
+  const t = 0.25
+  for (let i = 0; i < points.length - 2; i++) {
+    const p0 = points[i], p1 = points[i + 1], p2 = points[i + 2]
+    const d1 = Math.sqrt((p1.x - p0.x) ** 2 + (p1.y - p0.y) ** 2)
+    const d2 = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
+    const d = d1 + d2
+    if (d < 1e-6) {
+      cps.push(p1.x, p1.y, p1.x, p1.y)
       continue
     }
-    const alpha = m[i] / slopes[i]
-    const beta = m[i + 1] / slopes[i]
-    // Restrict to circle of radius 3 to ensure monotonicity
-    const s = alpha * alpha + beta * beta
-    if (s > 9) {
-      const tau = 3 / Math.sqrt(s)
-      m[i] = tau * alpha * slopes[i]
-      m[i + 1] = tau * beta * slopes[i]
-    }
+    const vx = p2.x - p0.x
+    const vy = p2.y - p0.y
+    // Raw control points
+    let cpInX = p1.x - (vx * t * d1) / d
+    const cpInY = p1.y - (vy * t * d1) / d
+    let cpOutX = p1.x + (vx * t * d2) / d
+    const cpOutY = p1.y + (vy * t * d2) / d
+    // Clamp X so control points stay within adjacent segment bounds
+    // Incoming cp must be >= previous point's x
+    cpInX = Math.max(cpInX, p0.x)
+    // Outgoing cp must be <= next point's x
+    cpOutX = Math.min(cpOutX, p2.x)
+    cps.push(cpInX, cpInY, cpOutX, cpOutY)
   }
-
-  // Step 4: convert tangents to cubic bezier control points
-  const result: { cp1x: number; cp1y: number; cp2x: number; cp2y: number }[] = []
-  for (let i = 0; i < n - 1; i++) {
-    const d = dx[i] / 3
-    result.push({
-      cp1x: points[i].x + d,
-      cp1y: points[i].y + d * m[i],
-      cp2x: points[i + 1].x - d,
-      cp2y: points[i + 1].y - d * m[i + 1],
-    })
-  }
-  return result
+  return cps
 }
 
 function padTime(n: number) {
@@ -222,15 +188,16 @@ function drawChart(
   width: number,
   height: number,
   now: number,
+  displayValue: number, // animated endpoint value (eased between ticks)
 ) {
   const FONT = '11px ui-monospace, SFMono-Regular, Menlo, Monaco, monospace'
   ctx.font = FONT
 
   const values = data.map((p) => p.value)
 
-  // Y bounds from DATA ONLY — don't include target (may be far away)
-  const dataMin = Math.min(...values)
-  const dataMax = Math.max(...values)
+  // Y bounds from DATA + display value — don't include target (may be far away)
+  const dataMin = Math.min(...values, displayValue)
+  const dataMax = Math.max(...values, displayValue)
 
   // Calculate precision based on price level
   const avgPrice = (dataMin + dataMax) / 2
@@ -254,13 +221,19 @@ function drawChart(
   const boundsMin = rawRange < minRange ? avgPrice - minRange / 2 : dataMin
   const boundsMax = rawRange < minRange ? avgPrice + minRange / 2 : dataMax
 
-  const tickY = getTickSize(rangeY)
+  // Pick tick size, then bump up if it produces too many labels (target 4-6)
+  let tickY = getTickSize(rangeY)
   const axisBoundsY = roundToMultiple(boundsMin, boundsMax, tickY)
   if (axisBoundsY.max <= axisBoundsY.min) {
     axisBoundsY.min -= tickY
     axisBoundsY.max += tickY
   }
-  const numTicksY = Math.ceil((axisBoundsY.max - axisBoundsY.min) / tickY) + 1
+  let numTicksY = Math.ceil((axisBoundsY.max - axisBoundsY.min) / tickY) + 1
+  // If too many ticks, double the tick size until we have ≤ 7
+  while (numTicksY > 7) {
+    tickY *= 2
+    numTicksY = Math.ceil((axisBoundsY.max - axisBoundsY.min) / tickY) + 1
+  }
 
   // X-axis: fixed time window → pixel mapping
   const timeLeft = now - WINDOW_MS
@@ -322,11 +295,8 @@ function drawChart(
 
   if (data.length < 2) return
 
-  // Extend data to `now` so the line always reaches the right anchor point
+  // The animated endpoint is drawn separately — don't include it in the spline data
   const lastPoint = data[data.length - 1]
-  const extendedData = lastPoint.ts < now
-    ? [...data, { ts: now, value: lastPoint.value }]
-    : [...data]
 
   // ─── Target price indicator ──────────────────────────────────────────
   const targetAbove = targetPrice > axisBoundsY.max
@@ -348,8 +318,7 @@ function drawChart(
       ctx.restore()
 
       // Target tag — same arrow-pointer style as current price, but grey
-      const endValue = extendedData[extendedData.length - 1].value
-      const estimatedEndY = getYPos(endValue)
+      const estimatedEndY = getYPos(displayValue)
       if (Math.abs(targetY - estimatedEndY) > 22) {
         drawPriceTag(ctx, graph.right, targetY, targetPrice.toFixed(dp), '#52525b', '#fff')
       }
@@ -393,16 +362,20 @@ function drawChart(
   ctx.fillStyle = '#f59e0bcc'
   ctx.lineWidth = 3
 
-  // Build pixel points from extended data, deduplicating points that are
-  // too close in pixel space (< 3px apart) to reduce bezier segments and
-  // produce smoother curves. Always keep first and last points.
-  const allPoints = extendedData.map((p) => ({
+  // Build spline from all data except the newest tick (which the animation
+  // is transitioning to), then append the animated endpoint as the final
+  // spline point so the whole curve stays smooth — no straight line segment.
+  const settled = data.length >= 3 ? data.slice(0, -1) : data
+  const allPoints = settled.map((p) => ({
     x: getXPos(p.ts),
     y: getYPos(p.value),
   }))
+  const endX = getXPos(now)
+  const endY = getYPos(displayValue)
+
   const curvePoints: { x: number; y: number }[] = [allPoints[0]]
   const MIN_PX_DIST = 3
-  for (let i = 1; i < allPoints.length - 1; i++) {
+  for (let i = 1; i < allPoints.length; i++) {
     const prev = curvePoints[curvePoints.length - 1]
     const pt = allPoints[i]
     const dx = pt.x - prev.x
@@ -411,32 +384,48 @@ function drawChart(
       curvePoints.push(pt)
     }
   }
-  curvePoints.push(allPoints[allPoints.length - 1])
-
-  // Endpoint = always at the synthetic "now" position
-  const endX = getXPos(now)
-  const endY = getYPos(lastPoint.value)
+  // Append animated endpoint as the final curve point
+  curvePoints.push({ x: endX, y: endY })
 
   if (curvePoints.length < 2) {
     ctx.restore()
     return
   }
 
-  // Monotone cubic interpolation — no reversals, smooth curves
-  const cpSegments = getMonotoneCubicControlPoints(curvePoints)
+  // Catmull-Rom bezier curve through all points including animated endpoint
+  const cps = getControlPoints(curvePoints)
+  const len = curvePoints.length
 
   ctx.beginPath()
   ctx.moveTo(curvePoints[0].x, curvePoints[0].y)
-  for (let i = 0; i < cpSegments.length; i++) {
-    const cp = cpSegments[i]
-    const pt = curvePoints[i + 1]
-    ctx.bezierCurveTo(cp.cp1x, cp.cp1y, cp.cp2x, cp.cp2y, pt.x, pt.y)
+
+  if (len === 2) {
+    ctx.lineTo(curvePoints[1].x, curvePoints[1].y)
+  } else {
+    // First segment: quadratic
+    ctx.quadraticCurveTo(cps[0], cps[1], curvePoints[1].x, curvePoints[1].y)
+    // Middle segments: cubic bezier
+    for (let i = 1; i < len - 2; i++) {
+      const c1 = (i - 1) * 4 + 2 // outgoing cp of point i
+      const c2 = i * 4           // incoming cp of point i+1
+      ctx.bezierCurveTo(
+        cps[c1], cps[c1 + 1],
+        cps[c2], cps[c2 + 1],
+        curvePoints[i + 1].x, curvePoints[i + 1].y,
+      )
+    }
+    // Last segment: quadratic
+    const lastCp = (len - 3) * 4 + 2
+    ctx.quadraticCurveTo(
+      cps[lastCp], cps[lastCp + 1],
+      curvePoints[len - 1].x, curvePoints[len - 1].y,
+    )
   }
   ctx.stroke()
 
   // Fill area under curve — build closed path without stroking the edges
   ctx.lineTo(endX, graph.bottom)
-  ctx.lineTo(pts[0], graph.bottom)
+  ctx.lineTo(curvePoints[0].x, graph.bottom)
   ctx.closePath()
 
   ctx.save()
@@ -473,9 +462,9 @@ function drawChart(
   ctx.restore() // undo clip
 
   // ─── Current price indicator ───────────────────────────────────────
-  const lastValue = lastPoint.value
-  const prevValue = data.length >= 2 ? data[data.length - 2].value : lastValue
-  const priceColor = lastValue >= prevValue ? '#22c55e' : '#ef4444'
+  // Color based on actual tick direction, position based on animated displayValue
+  const prevValue = data.length >= 2 ? data[data.length - 2].value : lastPoint.value
+  const priceColor = lastPoint.value >= prevValue ? '#22c55e' : '#ef4444'
 
   // Horizontal dashed line at current price
   ctx.save()
@@ -488,8 +477,8 @@ function drawChart(
   ctx.stroke()
   ctx.restore()
 
-  // Price tag with arrow pointer
-  drawPriceTag(ctx, graph.right, endY, lastValue.toFixed(dp), priceColor, '#000')
+  // Price tag with arrow pointer — shows animated value
+  drawPriceTag(ctx, graph.right, endY, displayValue.toFixed(dp), priceColor, '#000')
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────────
@@ -501,7 +490,12 @@ export function UnderlyingTickerChart({ underlying, targetPrice }: UnderlyingTic
   const sizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 })
   const midRef = useMainnetMidRef(underlying)
 
-  // Draw function
+  // Animation state: smoothly ease the endpoint between ticks
+  const animRef = useRef<{ fromValue: number; toValue: number; startTs: number }>({
+    fromValue: 0, toValue: 0, startTs: 0,
+  })
+
+  // Draw function — computes interpolated display value each frame
   const drawFrame = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas || dataRef.current.length < 2) return
@@ -509,10 +503,23 @@ export function UnderlyingTickerChart({ underlying, targetPrice }: UnderlyingTic
     if (w <= 0 || h <= 0) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+
+    const now = Date.now()
+    const anim = animRef.current
+    // Interpolate: ease-out over SAMPLE_MS so it arrives before next tick
+    // Fall back to last data value if animation not yet initialized
+    let displayValue: number
+    if (anim.startTs === 0) {
+      displayValue = dataRef.current[dataRef.current.length - 1].value
+    } else {
+      const t = Math.min((now - anim.startTs) / SAMPLE_MS, 1)
+      displayValue = anim.fromValue + (anim.toValue - anim.fromValue) * easeOut(t)
+    }
+
     const dpr = window.devicePixelRatio || 1
     ctx.save()
     ctx.scale(dpr, dpr)
-    drawChart(ctx, dataRef.current, targetPrice, w, h, Date.now())
+    drawChart(ctx, dataRef.current, targetPrice, w, h, now, displayValue)
     ctx.restore()
   }, [targetPrice])
 
@@ -545,26 +552,33 @@ export function UnderlyingTickerChart({ underlying, targetPrice }: UnderlyingTic
     return () => observer.disconnect()
   }, [])
 
-  // Pre-fill with mainnet candle history, then sample live data
+  // Pre-fill with 1m candles, then sample live
   useEffect(() => {
     dataRef.current = []
 
-    // Fetch recent 1m candles from mainnet to seed the chart
     const now = Date.now()
-    const prefillWindow = WINDOW_MS * 2
-    fetchMainnetCandles(underlying, '1m', now - prefillWindow, now)
+    // Fetch 1m candles for the last 2 minutes — sparse but covers full window
+    fetchMainnetCandles(underlying, '1m', now - 120_000, now)
+      .catch(() => [])
       .then((candles) => {
         if (!Array.isArray(candles) || candles.length === 0) return
-        const seed: PricePoint[] = []
+        const points: PricePoint[] = []
         for (const c of candles) {
-          seed.push({ ts: c.t, value: parseFloat(c.o) })
-          seed.push({ ts: c.T, value: parseFloat(c.c) })
+          points.push({ ts: c.t, value: parseFloat(c.o) })
+          points.push({ ts: c.t + 30_000, value: parseFloat(c.c) })
         }
+        points.sort((a, b) => a.ts - b.ts)
+
         const earliest = dataRef.current.length > 0 ? dataRef.current[0].ts : Infinity
-        const historical = seed.filter((p) => p.ts < earliest)
+        const historical = points.filter((p) => p.ts < earliest)
         dataRef.current = [...historical, ...dataRef.current]
+
+        // Initialize animation from the last prefilled value
+        if (dataRef.current.length > 0) {
+          const lastVal = dataRef.current[dataRef.current.length - 1].value
+          animRef.current = { fromValue: lastVal, toValue: lastVal, startTs: Date.now() }
+        }
       })
-      .catch(() => {})
 
     // Live sampling every SAMPLE_MS
     const addPoint = () => {
@@ -574,6 +588,18 @@ export function UnderlyingTickerChart({ underlying, targetPrice }: UnderlyingTic
       if (isNaN(price)) return
 
       const ts = Date.now()
+      const anim = animRef.current
+
+      // Update animation: current interpolated position becomes "from", new price is "to"
+      if (anim.startTs === 0) {
+        // First point — snap, no animation
+        animRef.current = { fromValue: price, toValue: price, startTs: ts }
+      } else {
+        const elapsed = Math.min((ts - anim.startTs) / SAMPLE_MS, 1)
+        const currentDisplay = anim.fromValue + (anim.toValue - anim.fromValue) * easeOut(elapsed)
+        animRef.current = { fromValue: currentDisplay, toValue: price, startTs: ts }
+      }
+
       dataRef.current.push({ ts, value: price })
 
       const cutoff = ts - WINDOW_MS * 2

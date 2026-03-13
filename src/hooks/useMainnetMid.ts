@@ -1,7 +1,7 @@
 import { useRef, useSyncExternalStore } from 'react'
 import { IS_TESTNET, API_URL } from '@/config'
 import { useMarketStore } from '@/stores/marketStore'
-import type { Candle } from '@/lib/hyperliquid/types'
+import type { Candle, Trade } from '@/lib/hyperliquid/types'
 
 const MAINNET_API_URL = 'https://api.hyperliquid.xyz'
 
@@ -11,6 +11,20 @@ const MAINNET_API_URL = 'https://api.hyperliquid.xyz'
  * Fetch candle data from mainnet (or current network if already mainnet).
  * Used for underlying asset charts so prices are always accurate.
  */
+/**
+ * Fetch recent trades from mainnet for a spot asset.
+ * Returns tick-by-tick trade data with precise timestamps.
+ */
+export async function fetchMainnetRecentTrades(coin: string): Promise<Trade[]> {
+  const url = IS_TESTNET ? MAINNET_API_URL : API_URL
+  const res = await fetch(`${url}/info`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'recentTrades', coin }),
+  })
+  return res.json()
+}
+
 export async function fetchMainnetCandles(
   coin: string,
   interval: string,

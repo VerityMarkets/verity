@@ -39,3 +39,19 @@ export function chatGroupLabel(key: string): string {
 export function isGroupKey(key: string): boolean {
   return key.startsWith('bo:')
 }
+
+/**
+ * Find the latest active market matching a group key.
+ * Returns the outcomeId to link to, or null if none found.
+ */
+export function findMarketForGroup(key: string, markets: ParsedMarket[]): number | null {
+  if (!key.startsWith('bo:')) return null
+  const [, underlying, period] = key.split(':')
+  const matching = markets.filter(
+    (m) => m.underlying === underlying && m.period === period
+  )
+  if (matching.length === 0) return null
+  // Latest expiry first
+  matching.sort((a, b) => b.expiry.localeCompare(a.expiry))
+  return matching[0].outcomeId
+}
