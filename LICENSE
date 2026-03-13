@@ -1,0 +1,58 @@
+Verity Source-Available License v1.0
+
+Copyright (c) 2025 AXE Labs LLC. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to use,
+copy, modify, and distribute the Software, subject to the following conditions:
+
+1. NON-COMMERCIAL USE ONLY
+
+   The Software may not be used, in whole or in part, for any commercial
+   purpose. "Commercial purpose" includes, but is not limited to: charging
+   fees, generating revenue, operating a paid service, or any use intended
+   for or directed toward financial gain.
+
+   Non-commercial use includes personal use, educational use, research, and
+   contributions back to this project.
+
+2. BUILDER FEE RETENTION
+
+   Any deployment, fork, or derivative work that connects to Hyperliquid
+   (or any other trading infrastructure) MUST retain the original builder
+   fee mechanism and builder address as defined in the source code. The
+   builder fee address, fee rate, and associated signing logic may not be
+   removed, modified, bypassed, or redirected.
+
+   This clause exists to sustain the project. The builder fee is the sole
+   source of funding for ongoing development and maintenance.
+
+3. SHARE-ALIKE
+
+   Any derivative work, modification, or fork of the Software must be
+   distributed under this same license, with all terms intact. You may not
+   sublicense, relicense, or apply additional restrictions beyond those
+   stated here.
+
+4. ATTRIBUTION
+
+   All copies and derivative works must retain this license file, all
+   copyright notices, and clearly attribute the original project:
+
+     Verity — https://github.com/VerityMarkets/verity
+
+5. NO WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
+
+6. TERMINATION
+
+   Any violation of these terms automatically and immediately terminates
+   your rights under this license. Upon termination, you must cease all
+   use and destroy all copies of the Software in your possession.

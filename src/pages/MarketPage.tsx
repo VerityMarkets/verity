@@ -11,6 +11,7 @@ import { ChartContainer } from '@/components/trading/ChartContainer'
 import { RecentTrades } from '@/components/trading/RecentTrades'
 import { Trollbox } from '@/components/chat/Trollbox'
 import { toToken } from '@/lib/hyperliquid/encoding'
+import { getChatGroup } from '@/lib/chatGroup'
 import { parseExpiry } from '@/components/trading/charts/chartUtils'
 
 type BookTab = 'book' | 'trades'
@@ -57,16 +58,36 @@ export function MarketPage() {
   const subscribeBook = useOrderBookStore((s) => s.subscribeBook)
   const unsubscribeAll = useOrderBookStore((s) => s.unsubscribeAll)
 
+  const fetchMarkets = useMarketStore((s) => s.fetchMarkets)
+
+  const chatGroup = market ? getChatGroup(market) : null
+
+  // Refresh markets on every navigation to a market page
+  useEffect(() => {
+    fetchMarkets()
+  }, [fetchMarkets])
+
+  // Select market on navigation
   useEffect(() => {
     if (marketId !== null) {
       selectMarket(marketId)
-      setFilter(String(marketId))
     }
     return () => {
       selectMarket(null)
-      setFilter('global')
     }
   }, [marketId])
+
+  // Set chat filter to group key (e.g. "bo:BTC:1d") once market resolves
+  useEffect(() => {
+    if (chatGroup) {
+      setFilter(chatGroup.key)
+    } else if (marketId !== null) {
+      setFilter(String(marketId))
+    }
+    return () => {
+      setFilter('global')
+    }
+  }, [marketId, chatGroup?.key])
 
   useEffect(() => {
     if (!market || settled) return
@@ -76,9 +97,8 @@ export function MarketPage() {
     subscribeBook(market.noCoin)
     return () => unsubscribeAll()
   }, [market?.yesCoin, market?.noCoin, settled])
-
-  const trollboxMarket = market
-    ? { id: marketId!, label: market.underlying || market.name }
+  const trollboxMarket = chatGroup
+    ? { id: chatGroup.key, label: chatGroup.label }
     : undefined
 
   const trollboxMarketCtx = market

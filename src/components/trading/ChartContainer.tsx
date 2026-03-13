@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useMainnetMid } from '@/hooks/useMainnetMid'
 import { useMarketStore } from '@/stores/marketStore'
 import { ProbabilityChart } from './charts/ProbabilityChart'
 import { UnderlyingTickerChart } from './charts/UnderlyingTickerChart'
@@ -7,6 +8,7 @@ import { ChartTypeSelector } from './charts/ChartTypeSelector'
 import { ChartHeader } from './charts/ChartHeader'
 import { ChartCountdown } from './charts/ChartCountdown'
 import { parseExpiry, parsePeriodMinutes } from './charts/chartUtils'
+import { VerityWordmark } from '@/components/VerityWordmark'
 import type { ChartType } from './charts/ChartTypeSelector'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
 
@@ -16,12 +18,16 @@ interface ChartContainerProps {
 }
 
 export function ChartContainer({ market, settled }: ChartContainerProps) {
-  const [chartType, setChartType] = useState<ChartType>('probability')
-  const mid = useMarketStore((s) => s.mids[market.underlying])
+  const mid = useMainnetMid(market.underlying)
+  const tradeSide = useMarketStore((s) => s.tradeSide)
+  const mids = useMarketStore((s) => s.mids)
 
   const isBinary = market.class === 'priceBinary'
   const periodMinutes = parsePeriodMinutes(market.period)
   const isShortBinary = isBinary && periodMinutes > 0 && periodMinutes <= 15
+
+  // Default to ticker chart for short binary markets, probability otherwise
+  const [chartType, setChartType] = useState<ChartType>(isShortBinary ? 'ticker' : 'probability')
 
   const isExpired = useMemo(() => {
     if (settled) return true
@@ -51,23 +57,21 @@ export function ChartContainer({ market, settled }: ChartContainerProps) {
             targetPrice={market.targetPrice}
             currentPrice={currentPrice}
           />
-          <ChartCountdown
-            expiry={market.expiry}
-            market={market}
-            isExpired={isExpired}
-          />
-        </div>
-      ) : (
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-300">Probability</h3>
-          {isExpired && (
+          <div className="mt-1 mr-1">
             <ChartCountdown
               expiry={market.expiry}
               market={market}
               isExpired={isExpired}
             />
-          )}
+          </div>
         </div>
+      ) : (
+        <ProbabilityHeader
+          market={market}
+          tradeSide={tradeSide}
+          mids={mids}
+          isExpired={isExpired}
+        />
       )}
 
       {/* Chart area */}
@@ -84,6 +88,7 @@ export function ChartContainer({ market, settled }: ChartContainerProps) {
         <UnderlyingCandleChart
           underlying={market.underlying}
           targetPrice={market.targetPrice}
+          periodMinutes={periodMinutes}
         />
       )}
 
@@ -94,6 +99,50 @@ export function ChartContainer({ market, settled }: ChartContainerProps) {
         showTicker={isShortBinary}
         showCandles={isBinary}
       />
+    </div>
+  )
+}
+
+// ─── Probability chart header ──────────────────────────────────────────────────
+
+function ProbabilityHeader({
+  market,
+  tradeSide,
+  mids,
+  isExpired,
+}: {
+  market: ParsedMarket
+  tradeSide: 'yes' | 'no'
+  mids: Record<string, string>
+  isExpired: boolean
+}) {
+  const coin = tradeSide === 'yes' ? market.yesCoin : market.noCoin
+  const midVal = mids[coin] ? parseFloat(mids[coin]) : 0.5
+  const pct = Math.round(midVal * 100)
+  const isUp = tradeSide === 'yes'
+  const direction = isUp ? 'UP' : 'DOWN'
+  const dirColor = isUp ? 'text-yes' : 'text-no'
+
+  return (
+    <div className="flex items-center justify-between mb-3">
+      <div>
+        <div className={`text-[10px] font-semibold uppercase tracking-wide ${dirColor}`}>
+          {direction}
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-lg font-bold text-gray-100">{pct}% chance</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        {isExpired && (
+          <ChartCountdown
+            expiry={market.expiry}
+            market={market}
+            isExpired={isExpired}
+          />
+        )}
+        <VerityWordmark className="h-5 text-gray-600 mr-8" mono />
+      </div>
     </div>
   )
 }

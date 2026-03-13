@@ -51,11 +51,14 @@ function CountdownTimer({ expiry }: { expiry: string }) {
   }, [expiry])
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-baseline gap-1.5">
       {parts.map((p, i) => (
-        <div key={p.label} className={`flex items-center gap-1 ${i > 0 ? 'ml-0.5' : ''}`}>
-          <span className="text-lg font-bold font-mono text-red-400">{p.value}</span>
-          <span className="text-[8px] text-gray-500 leading-none">{p.label}</span>
+        <div key={p.label} className="flex items-baseline">
+          {i > 0 && <span className="text-xl font-bold font-mono text-red-400 mr-1">:</span>}
+          <div className="flex flex-col items-center">
+            <span className="text-xl font-bold font-mono text-red-400 tabular-nums">{p.value}</span>
+            <span className="text-[8px] text-gray-500 uppercase tracking-wider -mt-0.5">{p.label}</span>
+          </div>
         </div>
       ))}
     </div>
@@ -64,7 +67,13 @@ function CountdownTimer({ expiry }: { expiry: string }) {
 
 function GoToLiveMarketButton({ market }: { market: ParsedMarket }) {
   const markets = useMarketStore((s) => s.markets)
+  const fetchMarkets = useMarketStore((s) => s.fetchMarkets)
   const liveMarket = findLiveMarket(market, markets)
+
+  // Refetch markets on mount to pick up newly created live instances
+  useEffect(() => {
+    fetchMarkets()
+  }, [fetchMarkets])
 
   if (!liveMarket) {
     return (

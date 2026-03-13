@@ -9,6 +9,7 @@ import { useMarketStore } from '@/stores/marketStore'
 import { useChatStore } from '@/stores/chatStore'
 import { restoreNostrKeypair } from '@/lib/nostr/identity'
 import { toToken } from '@/lib/hyperliquid/encoding'
+import { getChatGroup } from '@/lib/chatGroup'
 import { IS_TESTNET } from '@/config'
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -24,8 +25,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Build market context for mobile Trollbox
   const selectedMarket = selectedMarketId !== null ? getMarketOrExpired(selectedMarketId) : undefined
-  const trollboxMarket = selectedMarket
-    ? { id: selectedMarketId!, label: selectedMarket.underlying || selectedMarket.name }
+  const chatGroup = selectedMarket ? getChatGroup(selectedMarket) : null
+  const trollboxMarket = chatGroup
+    ? { id: chatGroup.key, label: chatGroup.label }
     : undefined
   const trollboxMarketCtx = selectedMarket
     ? {

@@ -30,6 +30,11 @@
 }
 
 @layer base {
+  /* Hide lightweight-charts TradingView watermark */
+  .tv-lightweight-charts a[href*="tradingview"] {
+    display: none !important;
+  }
+
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--color-surface-4) transparent;

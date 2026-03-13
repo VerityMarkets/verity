@@ -26,6 +26,15 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
 
   const isRecurring = market.class === 'priceBinary'
 
+  // Color-code progress bar by probability
+  const barColor = yesPct >= 70
+    ? 'from-yes to-yes/60'           // green — high probability
+    : yesPct >= 50
+      ? 'from-amber-400 to-amber-400/60' // amber — moderate
+      : yesPct >= 30
+        ? 'from-orange-500 to-orange-500/60' // orange — low-moderate
+        : 'from-no to-no/60'               // red — low probability
+
   return (
     <div className="card p-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -57,6 +66,23 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
             )}
           </h1>
 
+          {isRecurring && market.underlying && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="text-[10px] text-gray-500">Oracle:</span>
+              <a
+                href={`https://app.hyperliquid.xyz/trade/${market.underlying}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] text-amber-400/70 hover:text-amber-400 transition-colors"
+              >
+                HL Mainnet {market.underlying} Spot
+                <svg className="w-2.5 h-2.5 inline ml-0.5 -mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            </div>
+          )}
+
           {!isRecurring && market.description && (
             <p className="text-xs text-gray-400 mt-1">{market.description}</p>
           )}
@@ -86,7 +112,7 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
         <div className="flex-1 mr-4">
           <div className="h-2 rounded-full bg-surface-3 overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-yes to-yes/60 transition-all duration-500"
+              className={`h-full rounded-full bg-gradient-to-r ${barColor} transition-all duration-500`}
               style={{ width: `${yesPct}%` }}
             />
           </div>

@@ -1,22 +1,22 @@
 import { useEffect, useRef } from 'react'
 import { createChart, CandlestickSeries, LineStyle } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts'
-import { fetchCandles } from '@/lib/hyperliquid/api'
-import { useMarketStore } from '@/stores/marketStore'
+import { useMainnetMid, fetchMainnetCandles } from '@/hooks/useMainnetMid'
 import { getBaseChartOptions } from './chartUtils'
 
 interface UnderlyingCandleChartProps {
   underlying: string
   targetPrice: number
+  periodMinutes: number
 }
 
-export function UnderlyingCandleChart({ underlying, targetPrice }: UnderlyingCandleChartProps) {
+export function UnderlyingCandleChart({ underlying, targetPrice, periodMinutes }: UnderlyingCandleChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const lastCandleTimeRef = useRef<number>(0)
   const lastCandleOHLC = useRef<{ open: number; high: number; low: number; close: number } | null>(null)
-  const mid = useMarketStore((s) => s.mids[underlying])
+  const mid = useMainnetMid(underlying)
 
   // Create chart and fetch candles
   useEffect(() => {
@@ -65,10 +65,21 @@ export function UnderlyingCandleChart({ underlying, targetPrice }: UnderlyingCan
       })
     }
 
+    // Scale fetch window and candle interval to market period
     const now = Date.now()
-    const dayAgo = now - 24 * 60 * 60 * 1000
+    let interval = '1m'
+    let windowMs = periodMinutes * 60 * 1000
+    if (periodMinutes <= 0 || periodMinutes > 1440) {
+      // Fallback: 24h of 15m candles
+      windowMs = 24 * 60 * 60 * 1000
+      interval = '15m'
+    } else if (periodMinutes > 60) {
+      // >1h: use 5m candles
+      interval = '5m'
+    }
+    const startTime = now - windowMs
 
-    fetchCandles(underlying, '1m', dayAgo, now).then((candles) => {
+    fetchMainnetCandles(underlying, interval, startTime, now).then((candles) => {
       if (candles.length > 0) {
         const data = candles.map((c) => ({
           time: Math.floor(c.t / 1000) as Time,
@@ -102,7 +113,7 @@ export function UnderlyingCandleChart({ underlying, targetPrice }: UnderlyingCan
       chartRef.current = null
       seriesRef.current = null
     }
-  }, [underlying, targetPrice])
+  }, [underlying, targetPrice, periodMinutes])
 
   // Real-time update: patch latest candle close/high/low
   useEffect(() => {

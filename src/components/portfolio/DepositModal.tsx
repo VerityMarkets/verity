@@ -43,6 +43,7 @@ export function DepositModal({ onClose, initialTab = 'deposit' }: { onClose: () 
   const [tab, setTab] = useState<Tab>(initialTab)
 
   // Deposit swap state
+  const [showDepositSwap, setShowDepositSwap] = useState(false)
   const [swapAmount, setSwapAmount] = useState('')
   const [swapping, setSwapping] = useState(false)
 
@@ -207,11 +208,9 @@ export function DepositModal({ onClose, initialTab = 'deposit' }: { onClose: () 
                 <div className="text-2xl font-bold text-gray-100">
                   {quoteBalance.toFixed(2)} {quoteCoin}
                 </div>
-                {needsSwap && usdcBalance > 0 && (
-                  <div className="text-sm text-gray-400 mt-0.5">
-                    + {usdcBalance.toFixed(2)} USDC
-                  </div>
-                )}
+                <div className="text-sm text-gray-400 mt-0.5">
+                  + {usdcBalance.toFixed(2)} USDC
+                </div>
               </div>
 
               {/* Bridge */}
@@ -253,23 +252,81 @@ export function DepositModal({ onClose, initialTab = 'deposit' }: { onClose: () 
                 </a>
               )}
 
-              {/* Swap USDC → quoteCoin */}
+              {/* Swap USDC → quoteCoin (collapsible) */}
               {needsSwap && (
-                <SwapCard
-                  title={`Swap USDC → ${quoteCoin}`}
-                  description={`Markets on Verity settle in ${quoteCoin}. Swap your USDC to start trading.`}
-                  fromLabel="USDC"
-                  fromBalance={usdcBalance}
-                  toLabel={quoteCoin}
-                  amount={swapAmount}
-                  onAmountChange={setSwapAmount}
-                  onMax={() => setSwapAmount(String(usdcBalance))}
-                  onSwap={handleSwapBuy}
-                  swapping={swapping}
-                  disabled={!isConnected}
-                  swapAvailable={swapAvailable}
-                  testnetMessage={IS_TESTNET && !swapAvailable ? `Testnet ${quoteCoin} market not available` : undefined}
-                />
+                <div className="card overflow-hidden">
+                  <button
+                    onClick={() => setShowDepositSwap(!showDepositSwap)}
+                    className="flex items-center justify-between w-full px-4 py-3"
+                  >
+                    <span className="text-sm font-semibold text-gray-200">
+                      Swap USDC → {quoteCoin}
+                    </span>
+                    <svg
+                      className={`w-4 h-4 text-gray-400 transition-transform ${showDepositSwap ? 'rotate-180' : ''}`}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {showDepositSwap && (
+                    <div className="px-4 pb-4 space-y-3 border-t border-white/5 pt-3">
+                      <p className="text-xs text-gray-400">
+                        Markets on Verity settle in {quoteCoin}. Swap your USDC to start trading.
+                      </p>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[10px] text-gray-500 uppercase font-mono">USDC Amount</label>
+                          <span className="text-[10px] text-gray-500 font-mono">Bal: {usdcBalance.toFixed(2)}</span>
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            value={swapAmount}
+                            onChange={(e) => setSwapAmount(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full px-4 py-2.5 rounded-lg bg-surface-1 border border-white/5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-amber-500/30 pr-16"
+                          />
+                          <button
+                            onClick={() => setSwapAmount(String(usdcBalance))}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-amber-400 hover:text-amber-300 transition-colors"
+                          >
+                            MAX
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-center">
+                        <div className="w-8 h-8 rounded-full bg-surface-2 flex items-center justify-center">
+                          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                          </svg>
+                        </div>
+                      </div>
+
+                      <div className="bg-surface-1 rounded-lg px-4 py-2.5">
+                        <div className="text-[10px] text-gray-500 uppercase font-mono mb-0.5">You receive (approx.)</div>
+                        <div className="text-sm font-semibold text-gray-200">
+                          ~{swapAmount ? parseFloat(swapAmount).toFixed(2) : '0.00'} {quoteCoin}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={handleSwapBuy}
+                        disabled={swapping || !swapAmount || parseFloat(swapAmount) <= 0 || !isConnected || !swapAvailable}
+                        className="w-full py-2.5 rounded-lg text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-gray-950 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {!swapAvailable && IS_TESTNET
+                          ? `Testnet ${quoteCoin} market not available`
+                          : swapping
+                            ? 'Swapping...'
+                            : `Swap to ${quoteCoin}`}
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           ) : (
@@ -423,96 +480,3 @@ export function DepositModal({ onClose, initialTab = 'deposit' }: { onClose: () 
   )
 }
 
-/* ============================================================
-   Reusable Swap Card (used on deposit side)
-   ============================================================ */
-
-function SwapCard({
-  title,
-  description,
-  fromLabel,
-  fromBalance,
-  toLabel,
-  amount,
-  onAmountChange,
-  onMax,
-  onSwap,
-  swapping,
-  disabled,
-  swapAvailable,
-  testnetMessage,
-}: {
-  title: string
-  description: string
-  fromLabel: string
-  fromBalance: number
-  toLabel: string
-  amount: string
-  onAmountChange: (v: string) => void
-  onMax: () => void
-  onSwap: () => void
-  swapping: boolean
-  disabled: boolean
-  swapAvailable: boolean
-  testnetMessage?: string
-}) {
-  return (
-    <div className="card p-4 space-y-3">
-      <div className="text-sm font-semibold text-gray-200">{title}</div>
-      <p className="text-xs text-gray-400">{description}</p>
-
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className="text-[10px] text-gray-500 uppercase font-mono">{fromLabel} Amount</label>
-          <span className="text-[10px] text-gray-500 font-mono">Bal: {fromBalance.toFixed(2)}</span>
-        </div>
-        <div className="relative">
-          <input
-            type="number"
-            value={amount}
-            onChange={(e) => onAmountChange(e.target.value)}
-            placeholder="0.00"
-            className="w-full px-4 py-2.5 rounded-lg bg-surface-1 border border-white/5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-amber-500/30 pr-16"
-          />
-          <button
-            onClick={onMax}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-amber-400 hover:text-amber-300 transition-colors"
-          >
-            MAX
-          </button>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-center">
-        <div className="w-8 h-8 rounded-full bg-surface-2 flex items-center justify-center">
-          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-          </svg>
-        </div>
-      </div>
-
-      <div className="bg-surface-1 rounded-lg px-4 py-2.5">
-        <div className="text-[10px] text-gray-500 uppercase font-mono mb-0.5">You receive (approx.)</div>
-        <div className="text-sm font-semibold text-gray-200">
-          ~{amount ? parseFloat(amount).toFixed(2) : '0.00'} {toLabel}
-        </div>
-      </div>
-
-      <button
-        onClick={onSwap}
-        disabled={swapping || !amount || parseFloat(amount) <= 0 || disabled || !swapAvailable}
-        className="w-full py-2.5 rounded-lg text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-gray-950 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {!swapAvailable && testnetMessage
-          ? testnetMessage
-          : swapping
-            ? 'Swapping...'
-            : `Swap to ${toLabel}`}
-      </button>
-
-      {testnetMessage && !swapAvailable && (
-        <p className="text-[10px] text-gray-500 text-center">Use the faucet above to get testnet {toLabel}.</p>
-      )}
-    </div>
-  )
-}

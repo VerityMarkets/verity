@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useChatStore } from '@/stores/chatStore'
 import { useChatBalanceStore } from '@/stores/chatBalanceStore'
+import { chatGroupLabel, isGroupKey } from '@/lib/chatGroup'
 import type { ChatMessage as ChatMessageType } from '@/lib/nostr/types'
 import { Hashicon } from './Hashicon'
 
@@ -86,14 +87,18 @@ export function ChatMessage({
         {showMarketTag && (
           isCurrentMarket ? (
             <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1 rounded">
-              #{message.marketTag}
+              {chatGroupLabel(message.marketTag!)}
+            </span>
+          ) : isGroupKey(message.marketTag!) ? (
+            <span className="text-[10px] text-amber-500/50 bg-amber-500/5 px-1 rounded">
+              {chatGroupLabel(message.marketTag!)}
             </span>
           ) : (
             <Link
               to={`/market/${message.marketTag}`}
               className="text-[10px] text-amber-500/50 bg-amber-500/5 px-1 rounded cursor-pointer hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
             >
-              #{message.marketTag}
+              {chatGroupLabel(message.marketTag!)}
             </Link>
           )
         )}

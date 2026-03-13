@@ -9,8 +9,8 @@ import { ChatInput } from './ChatInput'
 import type { ChatMessage as ChatMessageType } from '@/lib/nostr/types'
 
 interface TrollboxProps {
-  /** Market-specific filter label and ID, omit for global-only */
-  market?: { id: number; label: string }
+  /** Market-specific chat group key and label, omit for global-only */
+  market?: { id: string; label: string }
   /** Token info for showing position badges */
   marketCtx?: MarketCtx
   className?: string
@@ -89,9 +89,9 @@ export function Trollbox({ market, marketCtx, className = '', style }: TrollboxP
           </button>
           {market && (
             <button
-              onClick={() => setFilter(String(market.id))}
+              onClick={() => setFilter(market.id)}
               className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors truncate max-w-[120px] ${
-                chatFilter === String(market.id)
+                chatFilter === market.id
                   ? 'bg-amber-500/15 text-amber-400'
                   : 'text-gray-400 hover:text-gray-200'
               }`}
@@ -114,7 +114,7 @@ export function Trollbox({ market, marketCtx, className = '', style }: TrollboxP
                 message={msg}
                 activeFilter={chatFilter}
                 marketCtx={marketCtx}
-                currentMarketId={market ? String(market.id) : undefined}
+                currentMarketId={market?.id}
                 onReply={setReplyingTo}
                 parentSnippet={parentSnippets.get(msg.id) ?? null}
               />
