@@ -1,0 +1,38 @@
+interface ChartHeaderProps {
+  underlying: string
+  targetPrice: number
+  currentPrice: number
+}
+
+export function ChartHeader({ underlying, targetPrice, currentPrice }: ChartHeaderProps) {
+  const delta = currentPrice - targetPrice
+  const isAbove = delta >= 0
+  const absDelta = Math.abs(delta)
+
+  return (
+    <div className="flex items-center gap-6">
+      <div>
+        <div className="text-[10px] text-gray-500 uppercase tracking-wide">Price to beat</div>
+        <div className="text-lg font-bold text-gray-100">
+          ${targetPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </div>
+      </div>
+      <div className="w-px h-8 bg-white/10" />
+      <div>
+        <div className="text-[10px] text-gray-500 uppercase tracking-wide">
+          Current price
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-lg font-bold text-gray-100">
+            ${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+          {currentPrice > 0 && (
+            <span className={`text-xs font-semibold ${isAbove ? 'text-yes' : 'text-no'}`}>
+              {isAbove ? '\u25B2' : '\u25BC'} ${absDelta.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

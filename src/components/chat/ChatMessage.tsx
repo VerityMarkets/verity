@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useChatStore } from '@/stores/chatStore'
-import { usePortfolioStore } from '@/stores/portfolioStore'
+import { useChatBalanceStore } from '@/stores/chatBalanceStore'
 import type { ChatMessage as ChatMessageType } from '@/lib/nostr/types'
 import { Hashicon } from './Hashicon'
 
@@ -32,13 +32,23 @@ interface ChatMessageProps {
   marketCtx?: MarketCtx
   /** The market page we're currently on (even when viewing global filter) */
   currentMarketId?: string
+  /** Callback when reply button is clicked */
+  onReply?: (msg: ChatMessageType) => void
+  /** Parent message content snippet for reply context */
+  parentSnippet?: string | null
 }
 
-export function ChatMessage({ message, activeFilter, marketCtx, currentMarketId }: ChatMessageProps) {
+export function ChatMessage({
+  message,
+  activeFilter,
+  marketCtx,
+  currentMarketId,
+  onReply,
+  parentSnippet,
+}: ChatMessageProps) {
   const reactToMessage = useChatStore((s) => s.reactToMessage)
   const nostrPubkey = useChatStore((s) => s.nostrPubkey)
-  const evmAddress = useChatStore((s) => s.evmAddress)
-  const getBalance = usePortfolioStore((s) => s.getBalance)
+  const getChatBalance = useChatBalanceStore((s) => s.getBalance)
 
   const isCurrentMarket = !!(currentMarketId && message.marketTag === currentMarketId)
   const showMarketTag = message.marketTag && message.marketTag !== activeFilter
@@ -47,13 +57,15 @@ export function ChatMessage({ message, activeFilter, marketCtx, currentMarketId 
     ? `${message.evmAddress.slice(0, 6)}…${message.evmAddress.slice(-4)}`
     : truncateHex(message.pubkey)
 
-  // Show position badge for the current user on market-filtered pages
-  const isOwnMessage = message.evmAddress && evmAddress &&
-    message.evmAddress.toLowerCase() === evmAddress.toLowerCase()
+  // Position badge — fetch from chatBalanceStore (works for ALL users, not just current)
   let positionBadge: { label: string; color: string } | null = null
-  if (isOwnMessage && marketCtx) {
-    const yesBal = getBalance(marketCtx.yesToken)
-    const noBal = getBalance(marketCtx.noToken)
+  if (message.evmAddress && marketCtx) {
+    const addr = message.evmAddress
+    // Use '+' prefix for balance coins (outcome tokens)
+    const yesBalCoin = '+' + marketCtx.yesToken.slice(1)
+    const noBalCoin = '+' + marketCtx.noToken.slice(1)
+    const yesBal = getChatBalance(addr, yesBalCoin)
+    const noBal = getChatBalance(addr, noBalCoin)
     if (yesBal > 0) {
       positionBadge = { label: `${Math.floor(yesBal)} ${marketCtx.sideNames[0]}`, color: 'text-yes bg-yes/15' }
     } else if (noBal > 0) {
@@ -92,9 +104,10 @@ export function ChatMessage({ message, activeFilter, marketCtx, currentMarketId 
         )}
       </div>
 
-      {message.parentId && (
+      {/* Reply context — show parent snippet */}
+      {message.parentId && parentSnippet && (
         <div className="text-[10px] text-gray-500 pl-2 border-l border-surface-4 ml-1 mt-0.5 mb-0.5 truncate">
-          replying...
+          {parentSnippet}
         </div>
       )}
 
@@ -102,7 +115,7 @@ export function ChatMessage({ message, activeFilter, marketCtx, currentMarketId 
         {message.content}
       </p>
 
-      {/* Reactions */}
+      {/* Reactions + reply */}
       <div className="flex items-center gap-2 mt-0.5">
         <button
           onClick={() => nostrPubkey && reactToMessage(message.id, message.pubkey)}
@@ -113,11 +126,19 @@ export function ChatMessage({ message, activeFilter, marketCtx, currentMarketId 
               : 'text-gray-400 hover:text-amber-400 disabled:hover:text-gray-400'
           } disabled:cursor-default`}
         >
-          <svg className="w-3 h-3" fill={message.userReacted ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+          <svg className="w-2.5 h-2.5" viewBox="0 0 24 24">
+            <polygon points="12,4 22,20 2,20" fill={message.userReacted ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} strokeLinejoin="round" />
           </svg>
           {message.reactions}
         </button>
+        {nostrPubkey && onReply && (
+          <button
+            onClick={() => onReply(message)}
+            className="text-[10px] text-gray-400 hover:text-amber-400 transition-colors opacity-0 group-hover:opacity-100"
+          >
+            Reply
+          </button>
+        )}
       </div>
     </div>
   )

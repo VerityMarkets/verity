@@ -1,11 +1,10 @@
 import { useSearchParams } from 'react-router-dom'
 import { MarketList } from '@/components/markets/MarketList'
-import { type Category } from '@/components/markets/CategoryBar'
 import { Trollbox } from '@/components/chat/Trollbox'
 
 export function HomePage() {
   const [searchParams] = useSearchParams()
-  const category = (searchParams.get('cat') as Category) || 'Trending'
+  const category = searchParams.get('cat') || 'trending'
 
   return (
     <div className="flex gap-4">

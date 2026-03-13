@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { WagmiProvider, http, useConnect, useAccount } from 'wagmi'
 import { injected } from 'wagmi/connectors'
@@ -13,11 +13,13 @@ import '@rainbow-me/rainbowkit/styles.css'
 import { Toaster } from 'react-hot-toast'
 
 import { IS_TESTNET, DEV_MODE } from './config'
+import { devWalletInjected } from './lib/devWallet'
 import { usePortfolioStore } from './stores/portfolioStore'
 import { AppShell } from './components/layout/AppShell'
 import { HomePage } from './pages/HomePage'
 import { MarketPage } from './pages/MarketPage'
 import { PortfolioPage } from './pages/PortfolioPage'
+import { AboutPage } from './pages/AboutPage'
 
 const config = getDefaultConfig({
   appName: 'Verity',
@@ -30,13 +32,18 @@ const config = getDefaultConfig({
 
 const queryClient = new QueryClient()
 
-/** In dev mode, auto-connect the injected dev wallet — no clicks needed. */
+/**
+ * In dev mode, auto-connect the injected dev wallet once on mount.
+ * Only fires when the dev wallet was actually injected (no real extension present).
+ */
 function DevAutoConnect() {
   const { connect } = useConnect()
   const { isConnected } = useAccount()
+  const tried = useRef(false)
 
   useEffect(() => {
-    if (!DEV_MODE || isConnected) return
+    if (!DEV_MODE || !devWalletInjected || isConnected || tried.current) return
+    tried.current = true
     connect({ connector: injected({ target: 'metaMask' }) })
   }, [connect, isConnected])
 
@@ -83,6 +90,7 @@ export default function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/market/:id" element={<MarketPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />
+              <Route path="/about" element={<AboutPage />} />
             </Routes>
           </AppShell>
           <Toaster

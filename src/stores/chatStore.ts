@@ -20,7 +20,7 @@ interface ChatStore {
   setOpen: (open: boolean) => void
   subscribeChat: () => void
   unsubscribeChat: () => void
-  sendMessage: (content: string, parentId?: string, parentPubkey?: string, marketTag?: string) => Promise<void>
+  sendMessage: (content: string, parentId?: string, parentPubkey?: string) => Promise<void>
   reactToMessage: (eventId: string, eventPubkey: string) => Promise<void>
   getFilteredMessages: () => ChatMessage[]
 }
@@ -140,11 +140,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     nostrClient.unsubscribe('verity-reactions')
   },
 
-  sendMessage: async (content, parentId, parentPubkey, marketTagOverride) => {
+  sendMessage: async (content, parentId, parentPubkey) => {
     const { nostrPrivkey, nostrPubkey, evmAddress, filter } = get()
     if (!nostrPrivkey || !nostrPubkey) return
 
-    const marketTag = marketTagOverride ?? (filter !== 'global' ? filter : undefined)
+    const marketTag = filter !== 'global' ? filter : undefined
 
     await nostrClient.publishComment(
       content,
@@ -167,8 +167,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   getFilteredMessages: () => {
     const { messages, filter } = get()
     if (filter === 'global') return messages
-    return messages.filter(
-      (m) => m.marketTag === filter || m.marketTag === null
-    )
+    return messages.filter((m) => m.marketTag === filter)
   },
 }))

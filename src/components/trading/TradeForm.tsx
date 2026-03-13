@@ -1,17 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAccount, useWalletClient } from 'wagmi'
 import toast from 'react-hot-toast'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
 import { useMarketStore } from '@/stores/marketStore'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import { useOrderBookStore } from '@/stores/orderbookStore'
+import { useAgentStore } from '@/stores/agentStore'
 import { orderToWire, buildOrderAction, signL1Action } from '@/lib/hyperliquid/signing'
-import { postExchange, fetchMaxBuilderFee } from '@/lib/hyperliquid/api'
-import { signApproveBuilderFee } from '@/lib/hyperliquid/signing'
-import { BUILDER_ADDRESS, BUILDER_FEE, IS_TESTNET, DEV_MODE } from '@/config'
+import { postExchange } from '@/lib/hyperliquid/api'
+import { BUILDER_ADDRESS, BUILDER_FEE, DEV_MODE } from '@/config'
 import { getDevSigner } from '@/lib/devWallet'
 
-type Side = 'yes' | 'no'
 type OrderType = 'buy' | 'sell'
 
 const MIN_ORDER_VALUE = 10 // Hyperliquid minimum per order
@@ -31,13 +30,30 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
   const [submitting, setSubmitting] = useState(false)
 
   const { address, isConnected } = useAccount()
-  const { data: walletClient, isLoading: walletClientLoading } = useWalletClient()
+  const { data: walletClient } = useWalletClient()
   const mids = useMarketStore((s) => s.mids)
   const outcomeQuoteCoin = useMarketStore((s) => s.outcomeQuoteCoin)
   const side = useMarketStore((s) => s.tradeSide)
   const setTradeSide = useMarketStore((s) => s.setTradeSide)
   const getBalance = usePortfolioStore((s) => s.getBalance)
   const balances = usePortfolioStore((s) => s.balances)
+
+  // Agent wallet
+  const agentKey = useAgentStore((s) => s.agentKey)
+  const getAgentSigner = useAgentStore((s) => s.getAgentSigner)
+  const enableTrading = useAgentStore((s) => s.enableTrading)
+  const enabling = useAgentStore((s) => s.enabling)
+  const loadAgent = useAgentStore((s) => s.load)
+  const clearAgent = useAgentStore((s) => s.clear)
+
+  // Load agent from localStorage when wallet connects
+  useEffect(() => {
+    if (address) {
+      loadAgent(address)
+    } else {
+      clearAgent()
+    }
+  }, [address, loadAgent, clearAgent])
 
   // Subscribe to book data directly so we re-render when books update
   const books = useOrderBookStore((s) => s.books)
@@ -91,6 +107,8 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
   const posBalance = balances.find((b) => b.coin === posCoin)
   const positionShares = posBalance ? parseFloat(posBalance.total) : 0
 
+  const tradingEnabled = !!agentKey
+
   function handleMax() {
     if (orderType === 'buy' && quoteBalance > 0 && priceDecimal > 0) {
       setShares(String(Math.floor(quoteBalance / priceDecimal)))
@@ -99,48 +117,28 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async function ensureBuilderFeeApproved(signer: any) {
-    if (!address) return
-
+  async function handleEnableTrading() {
+    const signer = walletClient ?? (DEV_MODE ? getDevSigner() : null)
+    if (!signer || !address) return
     try {
-      const maxFee = await fetchMaxBuilderFee(address, BUILDER_ADDRESS)
-      if (maxFee >= BUILDER_FEE) return // Already approved
-    } catch {
-      // If query fails, try to approve anyway
+      await enableTrading(signer, address)
+      toast.success('Trading enabled!')
+    } catch (err) {
+      toast.error((err as Error).message.slice(0, 80))
     }
-
-    const nonce = Date.now()
-    const sig = await signApproveBuilderFee(
-      signer,
-      BUILDER_ADDRESS as `0x${string}`,
-      '0.01%',
-      nonce,
-    )
-
-    await postExchange({
-      action: {
-        type: 'approveBuilderFee',
-        hyperliquidChain: IS_TESTNET ? 'Testnet' : 'Mainnet',
-        signatureChainId: '0x66eee',
-        maxFeeRate: '0.01%',
-        builder: BUILDER_ADDRESS,
-        nonce,
-      },
-      nonce,
-      signature: sig,
-    })
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const signer = walletClient ?? (DEV_MODE ? getDevSigner() : null)
+
+    // Use agent signer if available (validated against current address), otherwise fall back to wallet (dev mode)
+    const signer = getAgentSigner(address) ?? (DEV_MODE ? getDevSigner() : null)
     if (!isConnected || !address) {
       toast.error('Connect your wallet first')
       return
     }
     if (!signer) {
-      toast.error('Wallet client not ready — try again in a moment')
+      toast.error('Enable trading first')
       return
     }
     if (!priceCents || shareCount <= 0) {
@@ -152,9 +150,6 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
     try {
       const hasRealBuilder =
         BUILDER_ADDRESS !== '0x0000000000000000000000000000000000000000'
-      if (hasRealBuilder) {
-        await ensureBuilderFeeApproved(signer)
-      }
 
       const isBuy = orderType === 'buy'
       const order = orderToWire(assetId, isBuy, priceDecimal, shareCount)
@@ -198,8 +193,9 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
     }
   }
 
+  // When tradingEnabled (agent exists), we sign via agent — walletClient not needed
   const canSubmit =
-    isConnected && !walletClientLoading && !submitting && shareCount > 0 && !belowMin
+    isConnected && !submitting && shareCount > 0 && !belowMin && tradingEnabled
 
   return (
     <div className="card p-4">
@@ -365,21 +361,31 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="w-full py-3 rounded-lg text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-amber-500 hover:bg-amber-400 text-black"
-        >
-          {!isConnected
-            ? 'Connect Wallet'
-            : walletClientLoading
-              ? 'Initializing...'
+        {/* Enable Trading / Submit button */}
+        {isConnected && !tradingEnabled ? (
+          <button
+            type="button"
+            onClick={handleEnableTrading}
+            disabled={enabling || (!walletClient && !DEV_MODE)}
+            className="w-full py-3 rounded-lg text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-amber-500/15 text-amber-400 hover:bg-amber-500/25"
+          >
+            {enabling ? 'Signing...' : 'Enable Trading'}
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="w-full py-3 rounded-lg text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-amber-500 hover:bg-amber-400 text-black"
+          >
+            {!isConnected
+              ? 'Connect Wallet'
               : submitting
                 ? 'Confirming...'
                 : belowMin
                   ? `Min ${minShares} shares`
                   : `${orderType === 'buy' ? 'Buy' : 'Sell'} ${side === 'yes' ? market.sideNames[0] : market.sideNames[1]}`}
-        </button>
+          </button>
+        )}
       </form>
     </div>
   )

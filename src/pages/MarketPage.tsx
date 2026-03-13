@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 // Link still used for "market not found" fallback
 import { useMarketStore } from '@/stores/marketStore'
@@ -7,10 +7,11 @@ import { useChatStore } from '@/stores/chatStore'
 import { MarketHeader } from '@/components/trading/MarketHeader'
 import { TradeForm } from '@/components/trading/TradeForm'
 import { OrderBook } from '@/components/trading/OrderBook'
-import { PriceChart } from '@/components/trading/PriceChart'
+import { ChartContainer } from '@/components/trading/ChartContainer'
 import { RecentTrades } from '@/components/trading/RecentTrades'
 import { Trollbox } from '@/components/chat/Trollbox'
 import { toToken } from '@/lib/hyperliquid/encoding'
+import { parseExpiry } from '@/components/trading/charts/chartUtils'
 
 type BookTab = 'book' | 'trades'
 
@@ -34,6 +35,14 @@ export function MarketPage() {
   const market = marketId !== null ? getMarketOrExpired(marketId) : undefined
   const settled = market ? isSettled(market.outcomeId) : false
   const settlementResult = market ? getSettlementResult(market.outcomeId) : null
+
+  const isExpired = useMemo(() => {
+    if (settled) return true
+    if (!market) return false
+    const expDate = parseExpiry(market.expiry)
+    if (!expDate) return false
+    return expDate.getTime() <= Date.now()
+  }, [market?.expiry, settled])
 
   const activeCoin = market
     ? (tradeSide === 'yes' ? market.yesCoin : market.noCoin)
@@ -113,7 +122,7 @@ export function MarketPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
           {/* Left: Chart */}
           <div className="lg:col-span-2">
-            <PriceChart coin={market.yesCoin} />
+            <ChartContainer market={market} settled />
           </div>
 
           {/* Right: Result card */}
@@ -148,89 +157,93 @@ export function MarketPage() {
       {/* Main grid: Chart + Trade Form */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
         {/* Left column */}
-        <div className="lg:col-span-2 space-y-4">
-          <PriceChart coin={market.yesCoin} />
+        <div className={`${isExpired ? 'lg:col-span-3' : 'lg:col-span-2'} space-y-4`}>
+          <ChartContainer market={market} />
 
-          {/* Accordion: Book / Trades */}
-          <div className="card overflow-hidden">
-            <button
-              onClick={() => setBookOpen(!bookOpen)}
-              className="flex items-center justify-between w-full px-4 py-3"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-gray-300">
-                  {bookTab === 'book' ? 'Order Book' : 'Recent Trades'}
-                </span>
-                <span
-                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                    isYes ? 'bg-yes/15 text-yes' : 'bg-no/15 text-no'
-                  }`}
-                >
-                  {sideName}
-                </span>
-              </div>
-              <svg
-                className={`w-4 h-4 text-gray-400 transition-transform ${bookOpen ? 'rotate-180' : ''}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+          {/* Accordion: Book / Trades (hidden for expired markets) */}
+          {!isExpired && (
+            <div className="card overflow-hidden">
+              <button
+                onClick={() => setBookOpen(!bookOpen)}
+                className="flex items-center justify-between w-full px-4 py-3"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {bookOpen && (
-              <div className="border-t border-white/5">
-                <div className="flex border-b border-white/5">
-                  <button
-                    onClick={() => setBookTab('book')}
-                    className={`flex-1 py-2 text-xs font-semibold transition-colors ${
-                      bookTab === 'book'
-                        ? 'text-white border-b-2 border-amber-400'
-                        : 'text-gray-500 hover:text-gray-300'
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-300">
+                    {bookTab === 'book' ? 'Order Book' : 'Recent Trades'}
+                  </span>
+                  <span
+                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      isYes ? 'bg-yes/15 text-yes' : 'bg-no/15 text-no'
                     }`}
                   >
-                    Book
-                  </button>
-                  <button
-                    onClick={() => setBookTab('trades')}
-                    className={`flex-1 py-2 text-xs font-semibold transition-colors ${
-                      bookTab === 'trades'
-                        ? 'text-white border-b-2 border-amber-400'
-                        : 'text-gray-500 hover:text-gray-300'
-                    }`}
-                  >
-                    Trades
-                  </button>
+                    {sideName}
+                  </span>
                 </div>
-                <div className="p-4">
-                  {bookTab === 'book' ? (
-                    <OrderBook coin={activeCoin!} />
-                  ) : (
-                    <RecentTrades coin={activeCoin!} />
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+                <svg
+                  className={`w-4 h-4 text-gray-400 transition-transform ${bookOpen ? 'rotate-180' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
 
-        {/* Right column: Trade Form + Trollbox (when book open) */}
-        <div className="space-y-4">
-          <TradeForm market={market} />
-          {bookOpen && (
-            <Trollbox
-              market={trollboxMarket}
-              marketCtx={trollboxMarketCtx}
-              className="hidden lg:flex"
-              style={{ height: '400px' }}
-            />
+              {bookOpen && (
+                <div className="border-t border-white/5">
+                  <div className="flex border-b border-white/5">
+                    <button
+                      onClick={() => setBookTab('book')}
+                      className={`flex-1 py-2 text-xs font-semibold transition-colors ${
+                        bookTab === 'book'
+                          ? 'text-white border-b-2 border-amber-400'
+                          : 'text-gray-500 hover:text-gray-300'
+                      }`}
+                    >
+                      Book
+                    </button>
+                    <button
+                      onClick={() => setBookTab('trades')}
+                      className={`flex-1 py-2 text-xs font-semibold transition-colors ${
+                        bookTab === 'trades'
+                          ? 'text-white border-b-2 border-amber-400'
+                          : 'text-gray-500 hover:text-gray-300'
+                      }`}
+                    >
+                      Trades
+                    </button>
+                  </div>
+                  <div className="p-4">
+                    {bookTab === 'book' ? (
+                      <OrderBook coin={activeCoin!} />
+                    ) : (
+                      <RecentTrades coin={activeCoin!} />
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
+
+        {/* Right column: Trade Form + Trollbox (hidden for expired markets) */}
+        {!isExpired && (
+          <div className="space-y-4">
+            <TradeForm market={market} />
+            {bookOpen && (
+              <Trollbox
+                market={trollboxMarket}
+                marketCtx={trollboxMarketCtx}
+                className="hidden lg:flex"
+                style={{ height: '400px' }}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {/* Trollbox full-width below when book is closed */}
-      {!bookOpen && (
+      {(!bookOpen || isExpired) && (
         <Trollbox
           market={trollboxMarket}
           marketCtx={trollboxMarketCtx}

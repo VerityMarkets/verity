@@ -16,8 +16,8 @@ export const SIGNING_SOURCE = IS_TESTNET ? 'b' : 'a'
 // Builder fee address - replace with your actual builder address
 export const BUILDER_ADDRESS = '0x0000000000000000000000000000000000000000' as const
 
-// Builder fee in tenths of basis points (10 = 1bp = 0.01%)
-export const BUILDER_FEE = 10
+// Builder fee in tenths of basis points (100 = 10bp = 0.1%)
+export const BUILDER_FEE = 100
 
 export const NOSTR_RELAYS = [
   'wss://relay.damus.io',

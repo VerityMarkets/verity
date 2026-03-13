@@ -43,8 +43,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     subscribeMids()
     subscribeChat()
 
+    // Poll for new markets every 61s (catches new 15-min markets)
+    const marketPoll = setInterval(() => fetchMarkets(), 61_000)
+
     return () => {
       hlWebSocket.disconnect()
+      clearInterval(marketPoll)
     }
   }, [])
 

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import { useMarketStore } from '@/stores/marketStore'
 import { parseCoin } from '@/lib/hyperliquid/encoding'
+import { Tooltip } from '@/components/ui/Tooltip'
 
 function timeAgo(ts: number): string {
   const seconds = Math.floor((Date.now() - ts) / 1000)
@@ -89,11 +90,12 @@ export function TradeHistory({ search = '' }: { search?: string }) {
                   key={fill.tid}
                   className="border-b border-white/3 hover:bg-surface-2/50 transition-colors"
                 >
-                  <td
-                    className="px-4 py-3 text-xs text-gray-500 font-mono cursor-pointer"
-                    title={fullDate(fill.time)}
-                  >
-                    {timeAgo(fill.time)}
+                  <td className="px-4 py-3 text-xs text-gray-500 font-mono">
+                    <Tooltip text={fullDate(fill.time)}>
+                      <span className="cursor-pointer border-b border-dashed border-gray-600 hover:border-gray-400 hover:text-gray-400 transition-colors">
+                        {timeAgo(fill.time)}
+                      </span>
+                    </Tooltip>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-200">
                     {parsed ? (

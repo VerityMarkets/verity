@@ -1,7 +1,9 @@
 /**
  * Dev mode: injects a minimal EIP-1193 provider backed by a local private key
  * onto window.ethereum so wagmi's injected connector picks it up automatically.
- * No changes needed to any component — they keep using useAccount/useWalletClient.
+ *
+ * If a real wallet extension (e.g. MetaMask) is already present, we skip
+ * injection and let the user connect their real wallet instead.
  */
 import { privateKeyToAccount } from 'viem/accounts'
 import type { Hex } from 'viem'
@@ -10,9 +12,26 @@ const DEV_PRIVATE_KEY = (import.meta.env.VITE_DEV_PRIVATE_KEY ?? '') as Hex
 
 const DEV_CHAIN_ID = 421614 // Arbitrum Sepolia
 
+/** Whether the dev wallet was actually injected (no real extension present) */
+export let devWalletInjected = false
+
 export function injectDevWallet() {
   const account = privateKeyToAccount(DEV_PRIVATE_KEY)
   const address = account.address.toLowerCase() as Hex
+
+  // Always expose the dev signer (useful as fallback even with extension)
+  devSigner = {
+    signTypedData: (args: Parameters<typeof account.signTypedData>[0]) =>
+      account.signTypedData(args),
+  }
+
+  // If a real wallet extension already exists, skip injection
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const existing = (window as any).ethereum
+  if (existing && !existing.isDevWallet) {
+    console.log(`[DevWallet] Real wallet extension detected, skipping injection. Dev signer still available as fallback.`)
+    return
+  }
 
   const listeners: Record<string, Array<(...args: unknown[]) => void>> = {}
 
@@ -105,18 +124,8 @@ export function injectDevWallet() {
     },
   }
 
-  // Inject as window.ethereum (skip if a real wallet extension already defined it)
-  try {
-    ;(window as unknown as Record<string, unknown>).ethereum = provider
-  } catch {
-    console.warn('[DevWallet] Cannot override window.ethereum (wallet extension present), skipping injection')
-  }
-
-  // Expose a minimal signer for direct use (bypasses wagmi's useWalletClient)
-  devSigner = {
-    signTypedData: (args: Parameters<typeof account.signTypedData>[0]) =>
-      account.signTypedData(args),
-  }
+  ;(window as unknown as Record<string, unknown>).ethereum = provider
+  devWalletInjected = true
 
   console.log(`[DevWallet] Injected dev wallet: ${account.address}`)
 }

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useMarketStore } from '@/stores/marketStore'
 import { MarketCard } from './MarketCard'
+import { getMarketCategory, getCategoryDef } from '@/categories'
 import type { Category } from './CategoryBar'
 
 /** Parse the expiry string (YYYYMMDD-HHMM) into a Date. */
@@ -14,7 +15,7 @@ function parseExpiry(expiry: string): Date | null {
   return new Date(Date.UTC(y, mo, d, h, mi))
 }
 
-export function MarketList({ category = 'Trending' }: { category?: Category }) {
+export function MarketList({ category = 'trending' }: { category?: Category }) {
   const markets = useMarketStore((s) => s.markets)
   const loading = useMarketStore((s) => s.loading)
   const error = useMarketStore((s) => s.error)
@@ -22,37 +23,32 @@ export function MarketList({ category = 'Trending' }: { category?: Category }) {
 
   const filtered = useMemo(() => {
     let list = [...markets]
+    const catDef = getCategoryDef(category)
 
-    switch (category) {
-      case 'Trending':
-        // Sort by price deviation from 0.5 (most opinionated = most active)
-        list.sort((a, b) => {
-          const devA = Math.abs(getYesPrice(a) - 0.5)
-          const devB = Math.abs(getYesPrice(b) - 0.5)
-          return devB - devA
-        })
-        break
+    if (!catDef || catDef.type === 'meta') {
+      // Meta categories — custom sort/filter logic
+      switch (category) {
+        case 'trending':
+          list.sort((a, b) => {
+            const devA = Math.abs(getYesPrice(a) - 0.5)
+            const devB = Math.abs(getYesPrice(b) - 0.5)
+            return devB - devA
+          })
+          break
 
-      case 'New': {
-        const now = Date.now()
-        const dayMs = 24 * 60 * 60 * 1000
-        list = list.filter((m) => {
-          const exp = parseExpiry(m.expiry)
-          // Markets expiring in the next 24h are considered "new"
-          return exp && exp.getTime() > now && exp.getTime() - now < dayMs
-        })
-        break
+        case 'new': {
+          const now = Date.now()
+          const dayMs = 24 * 60 * 60 * 1000
+          list = list.filter((m) => {
+            const exp = parseExpiry(m.expiry)
+            return exp && exp.getTime() > now && exp.getTime() - now < dayMs
+          })
+          break
+        }
       }
-
-      case 'Sports':
-        list = list.filter((m) => m.class === 'sports')
-        break
-
-      case 'Crypto':
-        list = list.filter(
-          (m) => m.class === 'crypto' || m.class === 'priceBinary'
-        )
-        break
+    } else {
+      // Content categories — filter using the categorization system
+      list = list.filter((m) => getMarketCategory(m) === category)
     }
 
     return list

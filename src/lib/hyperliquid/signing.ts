@@ -140,6 +140,50 @@ export async function signApproveBuilderFee(
   return splitSignature(signature)
 }
 
+// --- Approve Agent signing (user-signed action) ---
+
+const APPROVE_AGENT_TYPES = {
+  'HyperliquidTransaction:ApproveAgent': [
+    { name: 'hyperliquidChain', type: 'string' },
+    { name: 'agentAddress', type: 'address' },
+    { name: 'agentName', type: 'string' },
+    { name: 'nonce', type: 'uint64' },
+  ],
+} as const
+
+export async function signApproveAgent(
+  walletClient: {
+    signTypedData: (args: {
+      domain: typeof USER_SIGNED_DOMAIN
+      types: typeof APPROVE_AGENT_TYPES
+      primaryType: 'HyperliquidTransaction:ApproveAgent'
+      message: {
+        hyperliquidChain: string
+        agentAddress: `0x${string}`
+        agentName: string
+        nonce: bigint
+      }
+    }) => Promise<`0x${string}`>
+  },
+  agentAddress: `0x${string}`,
+  agentName: string,
+  nonce: number
+): Promise<{ r: `0x${string}`; s: `0x${string}`; v: number }> {
+  const signature = await walletClient.signTypedData({
+    domain: USER_SIGNED_DOMAIN,
+    types: APPROVE_AGENT_TYPES,
+    primaryType: 'HyperliquidTransaction:ApproveAgent',
+    message: {
+      hyperliquidChain: IS_TESTNET ? 'Testnet' : 'Mainnet',
+      agentAddress,
+      agentName,
+      nonce: BigInt(nonce),
+    },
+  })
+
+  return splitSignature(signature)
+}
+
 // --- Withdraw signing (user-signed action) ---
 
 const WITHDRAW_TYPES = {

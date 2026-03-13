@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useAccount, useSignMessage } from 'wagmi'
 import { useChatStore } from '@/stores/chatStore'
+import { useChatBalanceStore } from '@/stores/chatBalanceStore'
 import { deriveNostrKeypair } from '@/lib/nostr/identity'
 import { ChatMessage } from './ChatMessage'
 import type { MarketCtx } from './ChatMessage'
 import { ChatInput } from './ChatInput'
+import type { ChatMessage as ChatMessageType } from '@/lib/nostr/types'
 
 interface TrollboxProps {
   /** Market-specific filter label and ID, omit for global-only */
@@ -24,17 +26,51 @@ export function Trollbox({ market, marketCtx, className = '', style }: TrollboxP
   const nostrPubkey = useChatStore((s) => s.nostrPubkey)
   const setIdentity = useChatStore((s) => s.setIdentity)
   const [signing, setSigning] = useState(false)
+  const [replyingTo, setReplyingTo] = useState<ChatMessageType | null>(null)
+  const fetchBalances = useChatBalanceStore((s) => s.fetchBalances)
 
   // Reset filter to 'global' when Trollbox has no market context
-  // (prevents stale market filter from tagging global messages)
   useEffect(() => {
     if (!market) setFilter('global')
   }, [market])
 
+  // Clear reply when filter changes
+  useEffect(() => {
+    setReplyingTo(null)
+  }, [chatFilter])
+
   const filteredMessages =
     chatFilter === 'global'
       ? messages
-      : messages.filter((m) => m.marketTag === chatFilter || m.marketTag === null)
+      : messages.filter((m) => m.marketTag === chatFilter)
+
+  // Build parent snippet lookup
+  const parentSnippets = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const msg of messages) {
+      if (msg.parentId) {
+        const parent = messages.find((m) => m.id === msg.parentId)
+        if (parent) {
+          const label = parent.evmAddress
+            ? `${parent.evmAddress.slice(0, 6)}…${parent.evmAddress.slice(-4)}`
+            : `${parent.pubkey.slice(0, 6)}…${parent.pubkey.slice(-4)}`
+          const snippet = parent.content.length > 50 ? parent.content.slice(0, 50) + '…' : parent.content
+          map.set(msg.id, `${label}: ${snippet}`)
+        }
+      }
+    }
+    return map
+  }, [messages])
+
+  // Batch-fetch spot balances for all chat users with evmAddresses (when on a market page)
+  useEffect(() => {
+    if (!marketCtx) return
+    const addresses = filteredMessages
+      .filter((m) => m.evmAddress)
+      .map((m) => m.evmAddress!)
+    if (addresses.length === 0) return
+    fetchBalances(addresses)
+  }, [filteredMessages.length, marketCtx])
 
   return (
     <div className={`flex flex-col card overflow-hidden ${className}`} style={style}>
@@ -73,14 +109,26 @@ export function Trollbox({ market, marketCtx, className = '', style }: TrollboxP
           </div>
         ) : (
           filteredMessages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} activeFilter={chatFilter} marketCtx={marketCtx} currentMarketId={market ? String(market.id) : undefined} />
+              <ChatMessage
+                key={msg.id}
+                message={msg}
+                activeFilter={chatFilter}
+                marketCtx={marketCtx}
+                currentMarketId={market ? String(market.id) : undefined}
+                onReply={setReplyingTo}
+                parentSnippet={parentSnippets.get(msg.id) ?? null}
+              />
           ))
         )}
       </div>
 
       <div className="p-3 border-t border-white/5 shrink-0">
         {isConnected && nostrPubkey ? (
-          <ChatInput marketTag={market ? String(market.id) : undefined} />
+          <ChatInput
+            replyingTo={replyingTo}
+            onCancelReply={() => setReplyingTo(null)}
+            onSent={() => setReplyingTo(null)}
+          />
         ) : isConnected && address ? (
           <button
             onClick={async () => {

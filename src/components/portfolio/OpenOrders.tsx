@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import { useMarketStore } from '@/stores/marketStore'
-import { useAccount, useWalletClient } from 'wagmi'
+import { useAgentStore } from '@/stores/agentStore'
+import { useAccount } from 'wagmi'
 import { parseCoin } from '@/lib/hyperliquid/encoding'
 import { signL1Action } from '@/lib/hyperliquid/signing'
 import { postExchange } from '@/lib/hyperliquid/api'
@@ -14,10 +15,10 @@ export function OpenOrders({ search = '' }: { search?: string }) {
   const fetchPortfolio = usePortfolioStore((s) => s.fetchPortfolio)
   const markets = useMarketStore((s) => s.markets)
   const { address } = useAccount()
-  const { data: walletClient } = useWalletClient()
+  const getAgentSigner = useAgentStore((s) => s.getAgentSigner)
 
   async function cancelOrder(oid: number, coin: string) {
-    const signer = walletClient ?? (DEV_MODE ? getDevSigner() : null)
+    const signer = getAgentSigner(address) ?? (DEV_MODE ? getDevSigner() : null)
     if (!signer || !address) {
       toast.error('Wallet not connected')
       return
