@@ -2,7 +2,7 @@ import { useMarketStore } from '@/stores/marketStore'
 import { useOrderBookStore } from '@/stores/orderbookStore'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import { MarketTimer } from '../markets/MarketTimer'
-import { formatExpiryWithTimezone } from '@/lib/marketFormat'
+import { formatExpiryWithTimezone, formatShares } from '@/lib/marketFormat'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
 
 interface MarketHeaderProps {
@@ -112,7 +112,7 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
               onClick={() => window.dispatchEvent(new CustomEvent('verity:sell-position', { detail: { side: 'yes', shares: Math.floor(yesShares) } }))}
               className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-yes/15 text-yes border border-yes/20 cursor-pointer hover:bg-yes/25 transition-colors"
             >
-              {market.sideNames[0]} {Math.floor(yesShares)}
+              {formatShares(yesShares)} {market.sideNames[0]}
               <span className="text-yes/30">|</span>
               {Math.round(yesEntry * 100)}¢
             </button>
@@ -122,7 +122,7 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
               onClick={() => window.dispatchEvent(new CustomEvent('verity:sell-position', { detail: { side: 'no', shares: Math.floor(noShares) } }))}
               className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-no/15 text-no border border-no/20 cursor-pointer hover:bg-no/25 transition-colors"
             >
-              {market.sideNames[1]} {Math.floor(noShares)}
+              {formatShares(noShares)} {market.sideNames[1]}
               <span className="text-no/30">|</span>
               {Math.round(noEntry * 100)}¢
             </button>

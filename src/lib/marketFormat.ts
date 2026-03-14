@@ -37,6 +37,17 @@ export function formatMarketName(market: ParsedMarket): string {
 }
 
 /**
+ * Format a share count for compact display.
+ * e.g. 854 → "854", 1600 → "1.6k", 12300 → "12.3k"
+ */
+export function formatShares(count: number): string {
+  const floored = Math.floor(count)
+  if (floored < 1000) return String(floored)
+  const k = floored / 1000
+  return k % 1 === 0 ? `${k}k` : `${k.toFixed(1)}k`
+}
+
+/**
  * Format expiry with timezone label for the market header.
  * Returns e.g. "Mar 15, 11:00 AM (UTC-7)"
  */

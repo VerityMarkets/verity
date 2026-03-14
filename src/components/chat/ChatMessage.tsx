@@ -4,6 +4,7 @@ import { useChatBalanceStore } from '@/stores/chatBalanceStore'
 import { chatGroupLabel, isGroupKey, findMarketForGroup } from '@/lib/chatGroup'
 import { useMarketStore } from '@/stores/marketStore'
 import type { ChatMessage as ChatMessageType } from '@/lib/nostr/types'
+import { formatShares } from '@/lib/marketFormat'
 import { Hashicon } from './Hashicon'
 
 function truncateHex(hex: string): string {
@@ -70,9 +71,9 @@ export function ChatMessage({
     const yesBal = getChatBalance(addr, yesBalCoin)
     const noBal = getChatBalance(addr, noBalCoin)
     if (yesBal > 0) {
-      positionBadge = { label: `${Math.floor(yesBal)} ${marketCtx.sideNames[0]}`, color: 'text-yes bg-yes/15' }
+      positionBadge = { label: `${formatShares(yesBal)} ${marketCtx.sideNames[0]}`, color: 'text-yes bg-yes/15' }
     } else if (noBal > 0) {
-      positionBadge = { label: `${Math.floor(noBal)} ${marketCtx.sideNames[1]}`, color: 'text-no bg-no/15' }
+      positionBadge = { label: `${formatShares(noBal)} ${marketCtx.sideNames[1]}`, color: 'text-no bg-no/15' }
     }
   }
 
