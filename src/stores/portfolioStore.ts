@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { fetchSpotState, fetchOpenOrders, fetchUserFills } from '@/lib/hyperliquid/api'
 import { hlWebSocket } from '@/lib/hyperliquid/websocket'
+import { getSwapPairCoin } from '@/lib/hyperliquid/encoding'
+import { useMarketStore } from '@/stores/marketStore'
 import type { SpotBalance, OpenOrder, Fill } from '@/lib/hyperliquid/types'
 
 /** Parse all spot balances into a coin→amount map */
@@ -47,7 +49,10 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => ({
       const spotBalances = toBalanceMap(state.balances)
       const outcomeBalances = state.balances.filter((b) => b.coin.startsWith('+'))
       const outcomeOrders = orders.filter((o) => o.coin.startsWith('#'))
-      const outcomeFills = fills.filter((f) => f.coin.startsWith('#'))
+      const swapCoin = getSwapPairCoin(useMarketStore.getState().spotMeta)
+      const relevantFill = (f: Fill) =>
+        f.coin.startsWith('#') || (swapCoin && f.coin === swapCoin)
+      const outcomeFills = fills.filter(relevantFill)
 
       set({
         spotBalances,
@@ -80,9 +85,12 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => ({
       (data) => {
         const newFills = data as Fill[]
         if (Array.isArray(newFills)) {
-          const outcomeFills = newFills.filter((f) => f.coin.startsWith('#'))
+          const swapCoin = getSwapPairCoin(useMarketStore.getState().spotMeta)
+          const relevant = newFills.filter(
+            (f) => f.coin.startsWith('#') || (swapCoin && f.coin === swapCoin)
+          )
           set((state) => ({
-            fills: [...outcomeFills, ...state.fills].slice(0, 100),
+            fills: [...relevant, ...state.fills].slice(0, 100),
           }))
         }
         // Refetch all balances

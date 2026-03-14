@@ -35,15 +35,23 @@ function fullDate(ts: number): string {
 export function TradeHistory({ search = '' }: { search?: string }) {
   const fills = usePortfolioStore((s) => s.fills)
   const markets = useMarketStore((s) => s.markets)
+  const quoteCoin = useMarketStore((s) => s.outcomeQuoteCoin) || 'USDC'
 
   const filteredFills = fills.filter((fill) => {
     if (!search) return true
+    const q = search.toLowerCase()
+    const isSwap = fill.coin.startsWith('@')
+    const isSettlement = fill.dir === 'Settlement'
+
+    // Allow searching by type
+    if (isSwap && ('swap'.includes(q) || 'usdh'.includes(q) || 'usdc'.includes(q))) return true
+    if (isSettlement && 'settlement'.includes(q)) return true
+
     const parsed = parseCoin(fill.coin)
     const market = parsed
       ? markets.find((m) => m.outcomeId === parsed.outcomeId)
       : null
-    if (!market) return true
-    const q = search.toLowerCase()
+    if (!market) return !search // show non-market fills when no search
     return (
       market.name.toLowerCase().includes(q) ||
       market.underlying.toLowerCase().includes(q)
@@ -70,26 +78,30 @@ export function TradeHistory({ search = '' }: { search?: string }) {
               <th className="text-left px-4 py-3">Side</th>
               <th className="text-right px-4 py-3">Price</th>
               <th className="text-right px-4 py-3">Size</th>
-              <th className="text-right px-4 py-3">Total</th>
+              <th className="text-right px-4 py-3">Total / PNL</th>
               <th className="text-right px-4 py-3">Fee</th>
             </tr>
           </thead>
           <tbody>
             {filteredFills.map((fill) => {
-              const parsed = parseCoin(fill.coin)
+              const isSwap = fill.coin.startsWith('@')
+              const isSettlement = fill.dir === 'Settlement'
+              const parsed = !isSwap ? parseCoin(fill.coin) : null
               const market = parsed
                 ? markets.find((m) => m.outcomeId === parsed.outcomeId)
                 : null
               const sideName = market && parsed
                 ? market.sideNames[parsed.side] ?? 'Unknown'
-                : parsed ? (parsed.side === 0 ? 'Yes' : 'No') : fill.coin
+                : parsed ? (parsed.side === 0 ? 'Yes' : 'No') : ''
               const isBuy = fill.side === 'B'
+              const pnl = parseFloat(fill.closedPnl)
 
               return (
                 <tr
                   key={fill.tid}
                   className="border-b border-white/3 hover:bg-surface-2/50 transition-colors"
                 >
+                  {/* Time */}
                   <td className="px-4 py-3 text-xs text-gray-500 font-mono">
                     <Tooltip text={fullDate(fill.time)}>
                       <span className="cursor-pointer border-b border-dashed border-gray-600 hover:border-gray-400 hover:text-gray-400 transition-colors">
@@ -97,8 +109,14 @@ export function TradeHistory({ search = '' }: { search?: string }) {
                       </span>
                     </Tooltip>
                   </td>
+
+                  {/* Market */}
                   <td className="px-4 py-3 text-sm text-gray-200">
-                    {parsed ? (
+                    {isSwap ? (
+                      <span className="text-gray-400">
+                        {quoteCoin} / USDC
+                      </span>
+                    ) : parsed ? (
                       <Link
                         to={`/market/${parsed.outcomeId}`}
                         className="hover:text-amber-400 transition-colors"
@@ -110,31 +128,59 @@ export function TradeHistory({ search = '' }: { search?: string }) {
                       fill.coin
                     )}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-200">
-                    {isBuy ? 'Buy' : 'Sell'}
+
+                  {/* Action */}
+                  <td className={`px-4 py-3 text-sm ${
+                    isSwap ? 'text-gray-200' : isSettlement ? 'text-amber-400' : isBuy ? 'text-yes' : 'text-no'
+                  }`}>
+                    {isSwap ? 'Swap' : isSettlement ? 'Settlement' : isBuy ? 'Buy' : 'Sell'}
                   </td>
+
+                  {/* Side */}
                   <td className="px-4 py-3">
-                    <span
-                      className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                        parsed && parsed.side === 0
-                          ? 'bg-yes/10 text-yes'
-                          : 'bg-no/10 text-no'
-                      }`}
-                    >
-                      {sideName}
-                    </span>
+                    {isSwap ? (
+                      <span className="text-xs font-semibold text-gray-200">To {isBuy ? 'USDH' : 'USDC'}</span>
+                    ) : (
+                      <span
+                        className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                          parsed && parsed.side === 0
+                            ? 'bg-yes/10 text-yes'
+                            : 'bg-no/10 text-no'
+                        }`}
+                      >
+                        {sideName}
+                      </span>
+                    )}
                   </td>
+
+                  {/* Price */}
                   <td className="px-4 py-3 text-right text-sm text-gray-200 font-mono">
-                    {Math.round(parseFloat(fill.px) * 100)}¢
+                    {isSwap
+                      ? `$${parseFloat(fill.px).toFixed(4)}`
+                      : `${Math.round(parseFloat(fill.px) * 100)}¢`}
                   </td>
+
+                  {/* Size */}
                   <td className="px-4 py-3 text-right text-sm text-gray-200 font-mono">
-                    {parseFloat(fill.sz).toFixed(0)}
+                    {parseFloat(fill.sz).toFixed(isSwap ? 2 : 0)}
                   </td>
-                  <td className="px-4 py-3 text-right text-sm text-gray-200 font-mono">
-                    ${(parseFloat(fill.px) * parseFloat(fill.sz)).toFixed(2)}
+
+                  {/* Total / PNL */}
+                  <td className="px-4 py-3 text-right text-sm font-mono">
+                    {isSettlement ? (
+                      <span className={pnl >= 0 ? 'text-yes' : 'text-no'}>
+                        {pnl >= 0 ? '+' : ''}${Math.abs(pnl).toFixed(2)}
+                      </span>
+                    ) : (
+                      <span className="text-gray-200">
+                        ${(parseFloat(fill.px) * parseFloat(fill.sz)).toFixed(2)}
+                      </span>
+                    )}
                   </td>
+
+                  {/* Fee */}
                   <td className="px-4 py-3 text-right text-xs text-gray-500 font-mono">
-                    {fill.fee}
+                    {parseFloat(fill.fee) > 0 ? fill.fee : '—'}
                   </td>
                 </tr>
               )

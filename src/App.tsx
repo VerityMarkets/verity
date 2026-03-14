@@ -15,6 +15,7 @@ import { Toaster } from 'react-hot-toast'
 import { IS_TESTNET, DEV_MODE } from './config'
 import { devWalletInjected } from './lib/devWallet'
 import { usePortfolioStore } from './stores/portfolioStore'
+import { useMarketStore } from './stores/marketStore'
 import { AppShell } from './components/layout/AppShell'
 import { HomePage } from './pages/HomePage'
 import { MarketPage } from './pages/MarketPage'
@@ -56,6 +57,7 @@ function PortfolioSync() {
   const fetchPortfolio = usePortfolioStore((s) => s.fetchPortfolio)
   const subscribePortfolio = usePortfolioStore((s) => s.subscribePortfolio)
   const unsubscribePortfolio = usePortfolioStore((s) => s.unsubscribePortfolio)
+  const spotMeta = useMarketStore((s) => s.spotMeta)
 
   useEffect(() => {
     if (!address) return
@@ -67,6 +69,11 @@ function PortfolioSync() {
       unsubscribePortfolio()
     }
   }, [address])
+
+  // Re-fetch once spotMeta loads so swap fills are included
+  useEffect(() => {
+    if (address && spotMeta) fetchPortfolio(address)
+  }, [spotMeta !== null])
 
   return null
 }

@@ -98,6 +98,15 @@ export function fetchUserFills(user: string): Promise<Fill[]> {
   return postInfo<Fill[]>({ type: 'userFills', user })
 }
 
+export function fetchExtraAgents(
+  user: string
+): Promise<{ name: string; address: string; validUntil: number }[]> {
+  return postInfo<{ name: string; address: string; validUntil: number }[]>({
+    type: 'extraAgents',
+    user,
+  })
+}
+
 export function fetchMaxBuilderFee(
   user: string,
   builder: string

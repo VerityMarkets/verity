@@ -153,6 +153,7 @@ export interface Fill {
   fee: string
   tid: number
   feeToken: string
+  twapId: number | null
 }
 
 // --- Order Action ---

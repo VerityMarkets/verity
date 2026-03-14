@@ -40,6 +40,26 @@ export function parseToken(token: string): { outcomeId: number; side: number } |
   }
 }
 
+/** Find the USDH/USDC swap pair coin string (e.g. "@1338") from spotMeta */
+export function getSwapPairCoin(
+  spotMeta: { universe: { tokens: [number, number]; index: number }[]; tokens: { name: string; index: number }[] } | null
+): string | null {
+  if (!spotMeta) return null
+  const tokenNameMap = new Map<number, string>()
+  for (const t of spotMeta.tokens) tokenNameMap.set(t.index, t.name)
+  for (const pair of spotMeta.universe) {
+    const base = tokenNameMap.get(pair.tokens[0]) ?? ''
+    const quote = tokenNameMap.get(pair.tokens[1]) ?? ''
+    if (
+      (base === 'USDH' && quote === 'USDC') ||
+      (base === 'USDC' && quote === 'USDH')
+    ) {
+      return `@${pair.index}`
+    }
+  }
+  return null
+}
+
 /** Parse an asset ID (100008890) back to outcomeId and side */
 export function parseAssetId(assetId: number): { outcomeId: number; side: number } | null {
   if (assetId < 100_000_000) return null

@@ -13,7 +13,7 @@ Decentralized prediction market interface for Hyperliquid HIP-4 outcome markets.
 ## Tech Stack
 
 - React + Vite + TypeScript
-- Tailwind CSS v4 (dark theme, amber/gold accent)
+- Tailwind CSS v4
 - wagmi v2 + viem + RainbowKit
 - Zustand, lightweight-charts, nostr-tools
 - @msgpack/msgpack for Hyperliquid signing

@@ -76,14 +76,16 @@ export async function signL1Action(
 ): Promise<{ r: `0x${string}`; s: `0x${string}`; v: number }> {
   const hash = actionHash(action, nonce, vaultAddress)
 
+  const message = {
+    source: SIGNING_SOURCE,
+    connectionId: hash,
+  }
+
   const signature = await walletClient.signTypedData({
     domain: EIP712_DOMAIN,
     types: AGENT_TYPES,
     primaryType: 'Agent',
-    message: {
-      source: SIGNING_SOURCE,
-      connectionId: hash,
-    },
+    message,
   })
 
   return splitSignature(signature)
@@ -243,7 +245,8 @@ function splitSignature(sig: `0x${string}`): {
   const s = `0x${Array.from(bytes.slice(32, 64))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')}` as `0x${string}`
-  const v = bytes[64]
+  // viem local accounts return v as yParity (0 or 1), HL expects 27 or 28
+  const v = bytes[64] < 27 ? bytes[64] + 27 : bytes[64]
   return { r, s, v }
 }
 

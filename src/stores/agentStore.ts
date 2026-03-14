@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import type { Hex } from 'viem'
 import { signApproveAgent, signApproveBuilderFee, signL1Action } from '@/lib/hyperliquid/signing'
-import { postExchange, fetchMaxBuilderFee } from '@/lib/hyperliquid/api'
+import { postExchange, fetchMaxBuilderFee, fetchExtraAgents } from '@/lib/hyperliquid/api'
 import { BUILDER_ADDRESS, BUILDER_FEE, IS_TESTNET } from '@/config'
 
 // ---------------------------------------------------------------------------
@@ -14,9 +14,13 @@ function storageKey(address: string): string {
   return `verity:agent:${net}:${address.toLowerCase()}`
 }
 
+const HAS_REAL_BUILDER =
+  BUILDER_ADDRESS !== '0x0000000000000000000000000000000000000000'
+
 interface StoredAgent {
   privateKey: Hex
   address: Hex
+  name: string
 }
 
 // ---------------------------------------------------------------------------
@@ -37,31 +41,28 @@ function createAgentSigner(privateKey: Hex) {
 // ---------------------------------------------------------------------------
 
 interface AgentStore {
-  /** Agent private key (hex) — null if not set up */
   agentKey: Hex | null
-  /** Agent address derived from key */
   agentAddress: Hex | null
-  /** The parent wallet address this agent is authorized for */
   parentAddress: string | null
-  /** Whether the enable-trading flow is in progress */
   enabling: boolean
-  /** Error from last enable attempt */
   error: string | null
+  /** Whether the builder fee has been approved for this wallet */
+  builderFeeApproved: boolean
 
-  /** Load persisted agent for a wallet address */
   load: (walletAddress: string) => void
-  /** Clear agent (e.g. on wallet disconnect) */
+  /** Validate agent + builder fee against on-chain state; clears agent if invalid */
+  revalidate: () => Promise<void>
   clear: () => void
-  /** Returns an L1 signer using the agent key, or null. Pass address to validate ownership. */
   getAgentSigner: (forAddress?: string) => ReturnType<typeof createAgentSigner> | null
-  /**
-   * Full enable-trading flow:
-   * 1. Generate agent keypair
-   * 2. Approve agent on-chain (user signs once)
-   * 3. Approve builder fee if needed (user signs once)
-   * 4. Persist agent key to localStorage
-   */
   enableTrading: (
+    walletClient: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      signTypedData: (args: any) => Promise<Hex>
+    },
+    walletAddress: string
+  ) => Promise<void>
+  /** Approve builder fee only (agent already exists) */
+  approveBuilderFee: (
     walletClient: {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       signTypedData: (args: any) => Promise<Hex>
@@ -76,31 +77,70 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   parentAddress: null,
   enabling: false,
   error: null,
+  builderFeeApproved: false,
 
   load: (walletAddress: string) => {
+    const { agentKey: currentKey, parentAddress } = get()
+    if (currentKey && parentAddress?.toLowerCase() === walletAddress.toLowerCase()) {
+      return
+    }
+
     const key = storageKey(walletAddress)
+    let stored: StoredAgent | null = null
     try {
       const raw = localStorage.getItem(key)
-      if (raw) {
-        const stored: StoredAgent = JSON.parse(raw)
-        set({
-          agentKey: stored.privateKey,
-          agentAddress: stored.address,
-          parentAddress: walletAddress,
-          error: null,
-        })
-        return
-      }
+      if (raw) stored = JSON.parse(raw)
     } catch {
-      // Corrupted data — clear it
-      localStorage.removeItem(storageKey(walletAddress))
+      localStorage.removeItem(key)
     }
-    set({
-      agentKey: null,
-      agentAddress: null,
-      parentAddress: walletAddress,
-      error: null,
-    })
+
+    if (stored) {
+      set({
+        agentKey: stored.privateKey,
+        agentAddress: stored.address,
+        parentAddress: walletAddress,
+        error: null,
+      })
+    } else {
+      set({
+        agentKey: null,
+        agentAddress: null,
+        parentAddress: walletAddress,
+        error: null,
+      })
+    }
+  },
+
+  revalidate: async () => {
+    const { agentAddress, parentAddress } = get()
+    if (!parentAddress) return
+
+    // Check agent validity
+    if (agentAddress) {
+      try {
+        const agents = await fetchExtraAgents(parentAddress)
+        const addr = agentAddress.toLowerCase()
+        const valid = agents.some(
+          (a) => a.address.toLowerCase() === addr && a.validUntil > Date.now()
+        )
+        if (!valid) {
+          localStorage.removeItem(storageKey(parentAddress))
+          set({ agentKey: null, agentAddress: null, error: null })
+        }
+      } catch {
+        // Network error — keep stored agent
+      }
+    }
+
+    // Check builder fee approval
+    if (HAS_REAL_BUILDER) {
+      try {
+        const maxFee = await fetchMaxBuilderFee(parentAddress, BUILDER_ADDRESS)
+        set({ builderFeeApproved: maxFee >= BUILDER_FEE })
+      } catch {
+        // Network error — assume not approved to be safe
+      }
+    }
   },
 
   clear: () => {
@@ -109,13 +149,13 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       agentAddress: null,
       parentAddress: null,
       error: null,
+      builderFeeApproved: false,
     })
   },
 
   getAgentSigner: (forAddress?: string) => {
     const { agentKey, parentAddress } = get()
     if (!agentKey) return null
-    // If an address is provided, verify the agent belongs to this wallet
     if (forAddress && parentAddress && forAddress.toLowerCase() !== parentAddress.toLowerCase()) {
       return null
     }
@@ -154,44 +194,18 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
         signature: agentSig,
       })
 
-      // 3. Approve builder fee if needed
-      const hasRealBuilder =
-        BUILDER_ADDRESS !== '0x0000000000000000000000000000000000000000'
-
-      if (hasRealBuilder) {
-        try {
-          const maxFee = await fetchMaxBuilderFee(walletAddress, BUILDER_ADDRESS)
-          if (maxFee < BUILDER_FEE) {
-            const feeNonce = Date.now()
-            const feeSig = await signApproveBuilderFee(
-              walletClient,
-              BUILDER_ADDRESS as `0x${string}`,
-              '0.1%',
-              feeNonce
-            )
-
-            await postExchange({
-              action: {
-                type: 'approveBuilderFee',
-                hyperliquidChain: IS_TESTNET ? 'Testnet' : 'Mainnet',
-                signatureChainId: '0x66eee',
-                maxFeeRate: '0.1%',
-                builder: BUILDER_ADDRESS,
-                nonce: feeNonce,
-              },
-              nonce: feeNonce,
-              signature: feeSig,
-            })
-          }
-        } catch {
-          // Non-fatal — orders can still work, just without builder fee
-        }
+      // 3. Approve builder fee (non-fatal)
+      try {
+        await get().approveBuilderFee(walletClient, walletAddress)
+      } catch {
+        // Non-fatal — orders can still work without builder fee
       }
 
       // 4. Persist to localStorage
       const stored: StoredAgent = {
         privateKey: agentPrivKey,
         address: agentAddr,
+        name: agentName,
       }
       localStorage.setItem(storageKey(walletAddress), JSON.stringify(stored))
 
@@ -207,6 +221,45 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
         enabling: false,
         error: (err as Error).message,
       })
+      throw err
+    }
+  },
+
+  approveBuilderFee: async (walletClient, walletAddress) => {
+    if (!HAS_REAL_BUILDER) return
+    set({ enabling: true, error: null })
+
+    try {
+      const maxFee = await fetchMaxBuilderFee(walletAddress, BUILDER_ADDRESS)
+      if (maxFee >= BUILDER_FEE) {
+        set({ builderFeeApproved: true, enabling: false })
+        return
+      }
+
+      const feeNonce = Date.now()
+      const feeSig = await signApproveBuilderFee(
+        walletClient,
+        BUILDER_ADDRESS as `0x${string}`,
+        '0.1%',
+        feeNonce
+      )
+
+      await postExchange({
+        action: {
+          type: 'approveBuilderFee',
+          hyperliquidChain: IS_TESTNET ? 'Testnet' : 'Mainnet',
+          signatureChainId: '0x66eee',
+          maxFeeRate: '0.1%',
+          builder: BUILDER_ADDRESS,
+          nonce: feeNonce,
+        },
+        nonce: feeNonce,
+        signature: feeSig,
+      })
+
+      set({ builderFeeApproved: true, enabling: false })
+    } catch (err) {
+      set({ enabling: false, error: (err as Error).message })
       throw err
     }
   },

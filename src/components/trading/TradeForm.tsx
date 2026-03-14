@@ -8,8 +8,8 @@ import { useOrderBookStore } from '@/stores/orderbookStore'
 import { useAgentStore } from '@/stores/agentStore'
 import { orderToWire, buildOrderAction, signL1Action } from '@/lib/hyperliquid/signing'
 import { postExchange } from '@/lib/hyperliquid/api'
-import { BUILDER_ADDRESS, BUILDER_FEE, DEV_MODE } from '@/config'
-import { getDevSigner } from '@/lib/devWallet'
+import { BUILDER_ADDRESS, BUILDER_FEE, DEV_MODE, IS_TESTNET } from '@/config'
+import { getDevSigner, devWalletInjected } from '@/lib/devWallet'
 
 type OrderType = 'buy' | 'sell'
 
@@ -40,16 +40,19 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
 
   // Agent wallet
   const agentKey = useAgentStore((s) => s.agentKey)
+  const builderFeeApproved = useAgentStore((s) => s.builderFeeApproved)
   const getAgentSigner = useAgentStore((s) => s.getAgentSigner)
   const enableTrading = useAgentStore((s) => s.enableTrading)
+  const approveBuilderFee = useAgentStore((s) => s.approveBuilderFee)
   const enabling = useAgentStore((s) => s.enabling)
   const loadAgent = useAgentStore((s) => s.load)
   const clearAgent = useAgentStore((s) => s.clear)
 
-  // Load agent from localStorage when wallet connects
+  // Load agent from localStorage when wallet connects, then validate once against API
   useEffect(() => {
     if (address) {
       loadAgent(address)
+      useAgentStore.getState().revalidate()
     } else {
       clearAgent()
     }
@@ -107,7 +110,10 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
   const posBalance = balances.find((b) => b.coin === posCoin)
   const positionShares = posBalance ? parseFloat(posBalance.total) : 0
 
+  const hasRealBuilder =
+    BUILDER_ADDRESS !== '0x0000000000000000000000000000000000000000'
   const tradingEnabled = !!agentKey
+  const needsBuilderFeeApproval = tradingEnabled && hasRealBuilder && !builderFeeApproved
 
   function handleMax() {
     if (orderType === 'buy' && quoteBalance > 0 && priceDecimal > 0) {
@@ -118,7 +124,7 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
   }
 
   async function handleEnableTrading() {
-    const signer = walletClient ?? (DEV_MODE ? getDevSigner() : null)
+    const signer = walletClient ?? (DEV_MODE && devWalletInjected ? getDevSigner() : null)
     if (!signer || !address) return
     try {
       await enableTrading(signer, address)
@@ -128,11 +134,26 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
     }
   }
 
+  async function handleApproveBuilderFee() {
+    const signer = walletClient ?? (DEV_MODE && devWalletInjected ? getDevSigner() : null)
+    if (!signer || !address) return
+    try {
+      await approveBuilderFee(signer, address)
+      toast.success('Builder fee approved!')
+    } catch (err) {
+      toast.error((err as Error).message.slice(0, 80))
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
-    // Use agent signer if available (validated against current address), otherwise fall back to wallet (dev mode)
-    const signer = getAgentSigner(address) ?? (DEV_MODE ? getDevSigner() : null)
+    // Use agent signer if available (validated against current address), otherwise fall back to dev wallet only if injected
+    const agentSigner = getAgentSigner(address)
+    const signer = agentSigner ?? (DEV_MODE && devWalletInjected ? getDevSigner() : null)
+    console.log('[Trade] signer source:', agentSigner ? 'agent' : devWalletInjected ? 'devWallet' : 'none',
+      '| agent address:', agentSigner?.address ?? 'n/a',
+      '| wallet address:', address)
     if (!isConnected || !address) {
       toast.error('Connect your wallet first')
       return
@@ -148,14 +169,11 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
 
     setSubmitting(true)
     try {
-      const hasRealBuilder =
-        BUILDER_ADDRESS !== '0x0000000000000000000000000000000000000000'
-
       const isBuy = orderType === 'buy'
       const order = orderToWire(assetId, isBuy, priceDecimal, shareCount)
       const action = buildOrderAction(
         [order],
-        hasRealBuilder ? { b: BUILDER_ADDRESS, f: BUILDER_FEE } : undefined,
+        hasRealBuilder ? { b: BUILDER_ADDRESS.toLowerCase(), f: BUILDER_FEE } : undefined,
       )
 
       const nonce = Date.now()
@@ -165,6 +183,7 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
         action,
         nonce,
         signature: sig,
+        vaultAddress: null,
       })
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -187,7 +206,21 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
       fetchBook(market.yesCoin)
       fetchBook(market.noCoin)
     } catch (err) {
-      toast.error((err as Error).message.slice(0, 80))
+      const msg = (err as Error).message
+      if (msg.includes('does not exist')) {
+        // Agent invalid — reset to enable trading flow
+        toast.error('Trading session expired — please re-enable trading')
+        if (address) {
+          localStorage.removeItem(`verity:agent:${IS_TESTNET ? 'testnet' : 'mainnet'}:${address.toLowerCase()}`)
+        }
+        useAgentStore.setState({ agentKey: null, agentAddress: null, builderFeeApproved: false, error: null })
+      } else if (msg.includes('Builder fee has not been approved')) {
+        // Builder fee not approved — keep agent, just need fee approval
+        toast.error('Builder fee needs approval')
+        useAgentStore.setState({ builderFeeApproved: false })
+      } else {
+        toast.error(msg.slice(0, 80))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -362,10 +395,10 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
         )}
 
         {/* Enable Trading / Submit button */}
-        {isConnected && !tradingEnabled ? (
+        {isConnected && (!tradingEnabled || needsBuilderFeeApproval) ? (
           <button
             type="button"
-            onClick={handleEnableTrading}
+            onClick={needsBuilderFeeApproval ? handleApproveBuilderFee : handleEnableTrading}
             disabled={enabling || (!walletClient && !DEV_MODE)}
             className="w-full py-3 rounded-lg text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-amber-500/15 text-amber-400 hover:bg-amber-500/25"
           >

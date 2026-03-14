@@ -74,14 +74,19 @@ function getControlPoints(points: { x: number; y: number }[]) {
     const vy = p2.y - p0.y
     // Raw control points
     let cpInX = p1.x - (vx * t * d1) / d
-    const cpInY = p1.y - (vy * t * d1) / d
+    let cpInY = p1.y - (vy * t * d1) / d
     let cpOutX = p1.x + (vx * t * d2) / d
-    const cpOutY = p1.y + (vy * t * d2) / d
-    // Clamp X so control points stay within adjacent segment bounds
-    // Incoming cp must be >= previous point's x
+    let cpOutY = p1.y + (vy * t * d2) / d
+    // Clamp so control points stay within adjacent segment bounds
     cpInX = Math.max(cpInX, p0.x)
-    // Outgoing cp must be <= next point's x
     cpOutX = Math.min(cpOutX, p2.x)
+    // Clamp Y to prevent vertical overshoot spikes
+    const minY01 = Math.min(p0.y, p1.y)
+    const maxY01 = Math.max(p0.y, p1.y)
+    cpInY = Math.max(minY01, Math.min(maxY01, cpInY))
+    const minY12 = Math.min(p1.y, p2.y)
+    const maxY12 = Math.max(p1.y, p2.y)
+    cpOutY = Math.max(minY12, Math.min(maxY12, cpOutY))
     cps.push(cpInX, cpInY, cpOutX, cpOutY)
   }
   return cps

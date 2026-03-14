@@ -7,7 +7,7 @@ import { parseCoin } from '@/lib/hyperliquid/encoding'
 import { signL1Action } from '@/lib/hyperliquid/signing'
 import { postExchange } from '@/lib/hyperliquid/api'
 import { DEV_MODE } from '@/config'
-import { getDevSigner } from '@/lib/devWallet'
+import { getDevSigner, devWalletInjected } from '@/lib/devWallet'
 import toast from 'react-hot-toast'
 
 export function OpenOrders({ search = '' }: { search?: string }) {
@@ -18,7 +18,7 @@ export function OpenOrders({ search = '' }: { search?: string }) {
   const getAgentSigner = useAgentStore((s) => s.getAgentSigner)
 
   async function cancelOrder(oid: number, coin: string) {
-    const signer = getAgentSigner(address) ?? (DEV_MODE ? getDevSigner() : null)
+    const signer = getAgentSigner(address) ?? (DEV_MODE && devWalletInjected ? getDevSigner() : null)
     if (!signer || !address) {
       toast.error('Wallet not connected')
       return

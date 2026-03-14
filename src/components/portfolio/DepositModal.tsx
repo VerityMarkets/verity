@@ -3,7 +3,7 @@ import { useAccount, useWalletClient } from 'wagmi'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import { useMarketStore } from '@/stores/marketStore'
 import { IS_TESTNET, DEV_MODE } from '@/config'
-import { getDevSigner } from '@/lib/devWallet'
+import { getDevSigner, devWalletInjected } from '@/lib/devWallet'
 import { orderToWire, buildOrderAction, signL1Action } from '@/lib/hyperliquid/signing'
 import { signWithdraw3 } from '@/lib/hyperliquid/signing'
 import { postExchange } from '@/lib/hyperliquid/api'
@@ -68,7 +68,7 @@ export function DepositModal({ onClose, initialTab = 'deposit' }: { onClose: () 
   const swapAvailable = !!swapPairAssetId
 
   function getSigner() {
-    return walletClient ?? (DEV_MODE ? getDevSigner() : null)
+    return walletClient ?? (DEV_MODE && devWalletInjected ? getDevSigner() : null)
   }
 
   function copyBridge() {
