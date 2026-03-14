@@ -57,7 +57,6 @@ export function DepositModal({ onClose, initialTab = 'deposit' }: { onClose: () 
   const { address, isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
   const spotBalances = usePortfolioStore((s) => s.spotBalances)
-  const fetchPortfolio = usePortfolioStore((s) => s.fetchPortfolio)
   const quoteCoin = useMarketStore((s) => s.outcomeQuoteCoin) || 'USDC'
   const spotMeta = useMarketStore((s) => s.spotMeta)
 
@@ -93,7 +92,7 @@ export function DepositModal({ onClose, initialTab = 'deposit' }: { onClose: () 
       const sig = await signL1Action(signer, action, nonce)
       await postExchange({ action, nonce, signature: sig })
       toast.success(`Swapped ${amt} USDC → ${quoteCoin}`)
-      if (address) fetchPortfolio(address)
+
       setSwapAmount('')
     } catch (err) {
       toast.error((err as Error).message.slice(0, 80))
@@ -119,7 +118,7 @@ export function DepositModal({ onClose, initialTab = 'deposit' }: { onClose: () 
       const sig = await signL1Action(signer, action, nonce)
       await postExchange({ action, nonce, signature: sig })
       toast.success(`Swapped ${amt} ${quoteCoin} → USDC`)
-      if (address) fetchPortfolio(address)
+
       setWithdrawSwapAmount('')
     } catch (err) {
       toast.error((err as Error).message.slice(0, 80))
@@ -156,7 +155,7 @@ export function DepositModal({ onClose, initialTab = 'deposit' }: { onClose: () 
       })
 
       toast.success(`Withdrawing ${amountStr} USDC to ${address.slice(0, 6)}...`)
-      if (address) fetchPortfolio(address)
+
       setWithdrawAmount('')
     } catch (err) {
       toast.error((err as Error).message.slice(0, 80))

@@ -57,7 +57,6 @@ export function MarketPage() {
     : ''
   const isYes = tradeSide === 'yes'
 
-  const fetchBook = useOrderBookStore((s) => s.fetchBook)
   const subscribeBook = useOrderBookStore((s) => s.subscribeBook)
   const unsubscribeAll = useOrderBookStore((s) => s.unsubscribeAll)
 
@@ -91,8 +90,6 @@ export function MarketPage() {
 
   useEffect(() => {
     if (!activeMarket) return
-    fetchBook(activeMarket.yesCoin)
-    fetchBook(activeMarket.noCoin)
     subscribeBook(activeMarket.yesCoin)
     subscribeBook(activeMarket.noCoin)
     return () => unsubscribeAll()

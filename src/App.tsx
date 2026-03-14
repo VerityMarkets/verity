@@ -54,18 +54,14 @@ function DevAutoConnect() {
 /** Subscribe to portfolio updates once when wallet connects. */
 function PortfolioSync() {
   const { address } = useAccount()
-  const fetchPortfolio = usePortfolioStore((s) => s.fetchPortfolio)
   const subscribePortfolio = usePortfolioStore((s) => s.subscribePortfolio)
   const unsubscribePortfolio = usePortfolioStore((s) => s.unsubscribePortfolio)
   const spotMeta = useMarketStore((s) => s.spotMeta)
 
   useEffect(() => {
     if (!address || !spotMeta) return
-    fetchPortfolio(address)
     subscribePortfolio(address)
-    const interval = setInterval(() => fetchPortfolio(address), 15_000)
     return () => {
-      clearInterval(interval)
       unsubscribePortfolio()
     }
   }, [address, spotMeta !== null])

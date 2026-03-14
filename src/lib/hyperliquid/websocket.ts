@@ -91,10 +91,10 @@ class HyperliquidWebSocket {
       if (dataCoin && dataCoin !== subscription.coin) return false
     }
 
-    // For user-specific channels, match user field
+    // For user-specific channels, match user field (case-insensitive — HL lowercases addresses)
     if (subscription.user && data) {
-      const dataUser = (data as Record<string, unknown>).user
-      if (dataUser && dataUser !== subscription.user) return false
+      const dataUser = (data as Record<string, unknown>).user as string | undefined
+      if (dataUser && dataUser.toLowerCase() !== subscription.user.toLowerCase()) return false
     }
 
     return true

@@ -1,8 +1,11 @@
+import { useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import { useMarketStore } from '@/stores/marketStore'
 import { parseCoin } from '@/lib/hyperliquid/encoding'
+import { formatMarketName } from '@/components/trading/charts/chartUtils'
 import { Tooltip } from '@/components/ui/Tooltip'
+import type { ParsedMarket } from '@/lib/hyperliquid/types'
 
 function timeAgo(ts: number): string {
   const seconds = Math.floor((Date.now() - ts) / 1000)
@@ -32,10 +35,38 @@ function fullDate(ts: number): string {
   }) + ` (${tz})`
 }
 
+
 export function TradeHistory({ search = '' }: { search?: string }) {
   const fills = usePortfolioStore((s) => s.fills)
   const markets = useMarketStore((s) => s.markets)
+  const settledOutcomes = useMarketStore((s) => s.settledOutcomes)
+  const getSettledMarket = useMarketStore((s) => s.getSettledMarket)
+  const fetchSettledMarket = useMarketStore((s) => s.fetchSettledMarket)
   const quoteCoin = useMarketStore((s) => s.outcomeQuoteCoin) || 'USDC'
+
+  // Collect outcome IDs from fills that aren't in active markets → fetch settled data
+  const missingOutcomeIds = useMemo(() => {
+    const ids = new Set<number>()
+    for (const fill of fills) {
+      if (fill.coin.startsWith('@')) continue
+      const parsed = parseCoin(fill.coin)
+      if (!parsed) continue
+      const inActive = markets.some((m) => m.outcomeId === parsed.outcomeId)
+      if (!inActive) ids.add(parsed.outcomeId)
+    }
+    return ids
+  }, [fills, markets])
+
+  useEffect(() => {
+    for (const id of missingOutcomeIds) {
+      fetchSettledMarket(id)
+    }
+  }, [missingOutcomeIds, fetchSettledMarket])
+
+  // Helper: resolve market from active or settled cache
+  function resolveMarket(outcomeId: number): ParsedMarket | undefined {
+    return markets.find((m) => m.outcomeId === outcomeId) ?? getSettledMarket(outcomeId)?.market
+  }
 
   const filteredFills = fills.filter((fill) => {
     if (!search) return true
@@ -48,12 +79,11 @@ export function TradeHistory({ search = '' }: { search?: string }) {
     if (isSettlement && 'settlement'.includes(q)) return true
 
     const parsed = parseCoin(fill.coin)
-    const market = parsed
-      ? markets.find((m) => m.outcomeId === parsed.outcomeId)
-      : null
+    const market = parsed ? resolveMarket(parsed.outcomeId) : undefined
     if (!market) return !search // show non-market fills when no search
+    const displayName = formatMarketName(market)
     return (
-      market.name.toLowerCase().includes(q) ||
+      displayName.toLowerCase().includes(q) ||
       market.underlying.toLowerCase().includes(q)
     )
   })
@@ -87,9 +117,7 @@ export function TradeHistory({ search = '' }: { search?: string }) {
               const isSwap = fill.coin.startsWith('@')
               const isSettlement = fill.dir === 'Settlement'
               const parsed = !isSwap ? parseCoin(fill.coin) : null
-              const market = parsed
-                ? markets.find((m) => m.outcomeId === parsed.outcomeId)
-                : null
+              const market = parsed ? resolveMarket(parsed.outcomeId) : undefined
               const sideName = market && parsed
                 ? market.sideNames[parsed.side] ?? 'Unknown'
                 : parsed ? (parsed.side === 0 ? 'Yes' : 'No') : ''
@@ -122,7 +150,7 @@ export function TradeHistory({ search = '' }: { search?: string }) {
                         className="hover:text-amber-400 transition-colors"
                       >
                         <span className="text-xs text-gray-500 font-mono mr-1.5">#{parsed.outcomeId}</span>
-                        {market ? (market.underlying || market.name) : `Outcome ${parsed.outcomeId}`}
+                        {market ? formatMarketName(market) : `Outcome ${parsed.outcomeId}`}
                       </Link>
                     ) : (
                       fill.coin

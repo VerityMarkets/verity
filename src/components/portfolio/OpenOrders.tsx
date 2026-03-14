@@ -4,6 +4,7 @@ import { useMarketStore } from '@/stores/marketStore'
 import { useAgentStore } from '@/stores/agentStore'
 import { useAccount } from 'wagmi'
 import { parseCoin } from '@/lib/hyperliquid/encoding'
+import { formatMarketName } from '@/components/trading/charts/chartUtils'
 import { signL1Action } from '@/lib/hyperliquid/signing'
 import { postExchange } from '@/lib/hyperliquid/api'
 import { DEV_MODE } from '@/config'
@@ -12,7 +13,6 @@ import toast from 'react-hot-toast'
 
 export function OpenOrders({ search = '' }: { search?: string }) {
   const openOrders = usePortfolioStore((s) => s.openOrders)
-  const fetchPortfolio = usePortfolioStore((s) => s.fetchPortfolio)
   const markets = useMarketStore((s) => s.markets)
   const { address } = useAccount()
   const getAgentSigner = useAgentStore((s) => s.getAgentSigner)
@@ -40,7 +40,6 @@ export function OpenOrders({ search = '' }: { search?: string }) {
 
       await postExchange({ action, nonce, signature: sig })
       toast.success('Order cancelled')
-      if (address) fetchPortfolio(address)
     } catch (err) {
       toast.error((err as Error).message.slice(0, 80))
     }
@@ -54,8 +53,9 @@ export function OpenOrders({ search = '' }: { search?: string }) {
       : null
     if (!market) return true
     const q = search.toLowerCase()
+    const displayName = formatMarketName(market)
     return (
-      market.name.toLowerCase().includes(q) ||
+      displayName.toLowerCase().includes(q) ||
       market.underlying.toLowerCase().includes(q)
     )
   })
@@ -106,7 +106,7 @@ export function OpenOrders({ search = '' }: { search?: string }) {
                         className="hover:text-amber-400 transition-colors"
                       >
                         <span className="text-xs text-gray-500 font-mono mr-1.5">#{parsed.outcomeId}</span>
-                        {market ? (market.underlying || market.name) : `Outcome ${parsed.outcomeId}`}
+                        {market ? formatMarketName(market) : `Outcome ${parsed.outcomeId}`}
                       </Link>
                     ) : (
                       order.coin

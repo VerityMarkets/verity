@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { fetchL2Book } from '@/lib/hyperliquid/api'
 import { hlWebSocket } from '@/lib/hyperliquid/websocket'
 import type { L2Level } from '@/lib/hyperliquid/types'
 
@@ -10,8 +9,6 @@ interface BookData {
 
 interface OrderBookStore {
   books: Record<string, BookData>
-  loading: boolean
-  fetchBook: (coin: string) => Promise<void>
   subscribeBook: (coin: string) => void
   unsubscribeBook: (coin: string) => void
   unsubscribeAll: () => void
@@ -23,26 +20,6 @@ interface OrderBookStore {
 
 export const useOrderBookStore = create<OrderBookStore>((set, get) => ({
   books: {},
-  loading: false,
-
-  fetchBook: async (coin: string) => {
-    set({ loading: true })
-    try {
-      const book = await fetchL2Book(coin)
-      set((state) => ({
-        books: {
-          ...state.books,
-          [coin]: {
-            bids: book.levels[0] ?? [],
-            asks: book.levels[1] ?? [],
-          },
-        },
-        loading: false,
-      }))
-    } catch {
-      set({ loading: false })
-    }
-  },
 
   subscribeBook: (coin: string) => {
     // Avoid duplicate subscriptions

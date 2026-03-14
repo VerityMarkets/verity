@@ -1,12 +1,10 @@
 import { create } from 'zustand'
-import { fetchRecentTrades } from '@/lib/hyperliquid/api'
 import { hlWebSocket } from '@/lib/hyperliquid/websocket'
 import type { Trade } from '@/lib/hyperliquid/types'
 
 interface TradeStore {
   trades: Trade[]
   coin: string | null
-  fetchTrades: (coin: string) => Promise<void>
   subscribeTrades: (coin: string) => void
   unsubscribeTrades: () => void
 }
@@ -15,22 +13,13 @@ export const useTradeStore = create<TradeStore>((set, get) => ({
   trades: [],
   coin: null,
 
-  fetchTrades: async (coin: string) => {
-    try {
-      const trades = await fetchRecentTrades(coin)
-      set({ trades: trades.slice(0, 50), coin })
-    } catch {
-      // ignore
-    }
-  },
-
   subscribeTrades: (coin: string) => {
     const currentCoin = get().coin
     if (currentCoin) {
       hlWebSocket.unsubscribe(`trades-${currentCoin}`)
     }
 
-    set({ coin })
+    set({ coin, trades: [] })
 
     hlWebSocket.subscribe(
       `trades-${coin}`,

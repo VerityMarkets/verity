@@ -3,12 +3,10 @@ import { useTradeStore } from '@/stores/tradeStore'
 
 export function RecentTrades({ coin }: { coin: string }) {
   const trades = useTradeStore((s) => s.trades)
-  const fetchTrades = useTradeStore((s) => s.fetchTrades)
   const subscribeTrades = useTradeStore((s) => s.subscribeTrades)
   const unsubscribeTrades = useTradeStore((s) => s.unsubscribeTrades)
 
   useEffect(() => {
-    fetchTrades(coin)
     subscribeTrades(coin)
     return () => unsubscribeTrades()
   }, [coin])

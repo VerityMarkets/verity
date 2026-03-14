@@ -1,13 +1,10 @@
 import { ColorType } from 'lightweight-charts'
 import type { DeepPartial, ChartOptions } from 'lightweight-charts'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
+import { parseExpiry } from '@/lib/marketFormat'
 
-export function parseExpiry(expiry: string): Date | null {
-  const match = expiry.match(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/)
-  if (!match) return null
-  const [, year, month, day, hour, minute] = match
-  return new Date(`${year}-${month}-${day}T${hour}:${minute}:00Z`)
-}
+// Re-export from shared location so existing imports keep working
+export { parseExpiry, formatMarketName } from '@/lib/marketFormat'
 
 export function parsePeriodMinutes(period: string): number {
   const match = period.match(/^(\d+)(m|H|D)$/i)

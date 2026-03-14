@@ -1,27 +1,9 @@
 import { useMarketStore } from '@/stores/marketStore'
 import { useOrderBookStore } from '@/stores/orderbookStore'
+import { usePortfolioStore } from '@/stores/portfolioStore'
 import { MarketTimer } from '../markets/MarketTimer'
-import { parseExpiry } from './charts/chartUtils'
+import { formatExpiryWithTimezone } from '@/lib/marketFormat'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
-
-function formatExpiryDateTime(expiry: string): string | null {
-  const date = parseExpiry(expiry)
-  if (!date) return null
-  const formatted = date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  })
-  // Append UTC offset (e.g. "UTC-7")
-  const offsetMin = date.getTimezoneOffset()
-  const sign = offsetMin <= 0 ? '+' : '-'
-  const absHours = Math.floor(Math.abs(offsetMin) / 60)
-  const absMin = Math.abs(offsetMin) % 60
-  const utcLabel = absMin > 0 ? `UTC${sign}${absHours}:${String(absMin).padStart(2, '0')}` : `UTC${sign}${absHours}`
-  return `${formatted.replace(/\bam\b/i, 'AM').replace(/\bpm\b/i, 'PM')} (${utcLabel})`
-}
 
 interface MarketHeaderProps {
   market: ParsedMarket
@@ -32,10 +14,21 @@ interface MarketHeaderProps {
 export function MarketHeader({ market, settled, settlementResult }: MarketHeaderProps) {
   const mids = useMarketStore((s) => s.mids)
   const books = useOrderBookStore((s) => s.books)
+  const balances = usePortfolioStore((s) => s.balances)
 
   // Use mid from order book (midpoint of best bid/ask), fallback to allMids
   const yesMid = mids[market.yesCoin] ? parseFloat(mids[market.yesCoin]) : 0.5
   const noMid = mids[market.noCoin] ? parseFloat(mids[market.noCoin]) : 0.5
+
+  // User position: look up token balances for this market's yes/no coins
+  const yesTokenCoin = '+' + market.yesCoin.slice(1)
+  const noTokenCoin = '+' + market.noCoin.slice(1)
+  const yesBalance = balances.find((b) => b.coin === yesTokenCoin)
+  const noBalance = balances.find((b) => b.coin === noTokenCoin)
+  const yesShares = yesBalance ? parseFloat(yesBalance.total) : 0
+  const noShares = noBalance ? parseFloat(noBalance.total) : 0
+  const yesEntry = yesShares > 0 ? parseFloat(yesBalance!.entryNtl) / yesShares : 0
+  const noEntry = noShares > 0 ? parseFloat(noBalance!.entryNtl) / noShares : 0
 
   // For settled markets, show final prices
   const yesPrice = settled ? (settlementResult === 'yes' ? 1 : 0) : yesMid
@@ -81,7 +74,7 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
                 {market.underlying} above ${market.targetPrice.toLocaleString()}
                 {market.expiry && (
                   <span className="text-gray-400 font-normal">
-                    {' '}on {formatExpiryDateTime(market.expiry)}?
+                    {' '}on {formatExpiryWithTimezone(market.expiry)}?
                   </span>
                 )}
               </>
@@ -113,6 +106,30 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
         </div>
 
         <div className="flex items-center gap-4 shrink-0">
+          {/* Position pills — click to prefill sell */}
+          {yesShares > 0 && (
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('verity:sell-position', { detail: { side: 'yes', shares: Math.floor(yesShares) } }))}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-yes/15 text-yes border border-yes/20 cursor-pointer hover:bg-yes/25 transition-colors"
+            >
+              {market.sideNames[0]} {Math.floor(yesShares)}
+              <span className="text-yes/30">|</span>
+              {Math.round(yesEntry * 100)}¢
+            </button>
+          )}
+          {noShares > 0 && (
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('verity:sell-position', { detail: { side: 'no', shares: Math.floor(noShares) } }))}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-no/15 text-no border border-no/20 cursor-pointer hover:bg-no/25 transition-colors"
+            >
+              {market.sideNames[1]} {Math.floor(noShares)}
+              <span className="text-no/30">|</span>
+              {Math.round(noEntry * 100)}¢
+            </button>
+          )}
+
+          {(yesShares > 0 || noShares > 0) && <div className="w-px h-10 bg-white/10" />}
+
           <div className="text-center">
             <div className="text-2xl font-bold text-yes">{yesPct}¢</div>
             <div className="text-[10px] text-gray-500 uppercase">

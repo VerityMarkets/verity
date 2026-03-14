@@ -2,14 +2,10 @@ import { API_URL } from '@/config'
 import type {
   OutcomeMeta,
   SettledOutcome,
-  AllMids,
   SpotMeta,
-  L2Book,
-  Trade,
   Candle,
   SpotClearinghouseState,
   OpenOrder,
-  Fill,
 } from './types'
 
 async function postInfo<T>(body: Record<string, unknown>): Promise<T> {
@@ -60,18 +56,6 @@ export function fetchSpotMeta(): Promise<SpotMeta> {
   return postInfo<SpotMeta>({ type: 'spotMeta' })
 }
 
-export function fetchAllMids(): Promise<AllMids> {
-  return postInfo<AllMids>({ type: 'allMids' })
-}
-
-export function fetchL2Book(coin: string): Promise<L2Book> {
-  return postInfo<L2Book>({ type: 'l2Book', coin })
-}
-
-export function fetchRecentTrades(coin: string): Promise<Trade[]> {
-  return postInfo<Trade[]>({ type: 'recentTrades', coin })
-}
-
 export function fetchCandles(
   coin: string,
   interval: string,
@@ -93,10 +77,6 @@ export function fetchSpotState(user: string): Promise<SpotClearinghouseState> {
 
 export function fetchOpenOrders(user: string): Promise<OpenOrder[]> {
   return postInfo<OpenOrder[]>({ type: 'frontendOpenOrders', user })
-}
-
-export function fetchUserFills(user: string): Promise<Fill[]> {
-  return postInfo<Fill[]>({ type: 'userFills', user })
 }
 
 export function fetchExtraAgents(

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { fetchOutcomeMeta, fetchAllMids, fetchSpotMeta, fetchSettledOutcome } from '@/lib/hyperliquid/api'
+import { fetchOutcomeMeta, fetchSpotMeta, fetchSettledOutcome } from '@/lib/hyperliquid/api'
 import { hlWebSocket } from '@/lib/hyperliquid/websocket'
 import { toCoin, toAssetId } from '@/lib/hyperliquid/encoding'
 import type { ParsedMarket, AllMids, SpotMeta, Outcome } from '@/lib/hyperliquid/types'
@@ -99,9 +99,8 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
   fetchMarkets: async () => {
     set({ loading: true, error: null })
     try {
-      const [meta, mids, spotMeta] = await Promise.all([
+      const [meta, spotMeta] = await Promise.all([
         fetchOutcomeMeta(),
-        fetchAllMids(),
         fetchSpotMeta(),
       ])
 
@@ -122,7 +121,6 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
 
       set({
         markets,
-        mids,
         spotMeta,
         outcomeQuoteCoin,
         loading: false,

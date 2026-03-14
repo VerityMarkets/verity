@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useMarketStore } from '@/stores/marketStore'
+import { formatMarketName } from '@/lib/marketFormat'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
 import { MarketTimer } from './MarketTimer'
 
@@ -8,7 +9,6 @@ export function MarketCard({ market }: { market: ParsedMarket }) {
   const yesPrice = getYesPrice(market)
   const yesPct = Math.round(yesPrice * 100)
 
-  const underlying = market.underlying || market.name
   const isRecurring = market.class === 'priceBinary'
 
   return (
@@ -27,13 +27,7 @@ export function MarketCard({ market }: { market: ParsedMarket }) {
           </div>
 
           <h3 className="text-sm font-semibold text-gray-100 group-hover:text-amber-400 transition-colors leading-snug">
-            {isRecurring ? (
-              <>
-                {underlying} above ${market.targetPrice.toLocaleString()}?
-              </>
-            ) : (
-              market.name
-            )}
+            {formatMarketName(market)}{isRecurring ? '?' : ''}
           </h3>
         </div>
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAccount, useWalletClient } from 'wagmi'
 import toast from 'react-hot-toast'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
@@ -58,9 +58,29 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
     }
   }, [address, loadAgent, clearAgent])
 
+  // Listen for sell-position events from position pills
+  const handleSellPosition = useCallback((e: Event) => {
+    const { side: posSide, shares: posShares } = (e as CustomEvent).detail
+    setTradeSide(posSide)
+    setOrderType('sell')
+    setShares(String(posShares))
+    // Set price from best bid (same logic as clicking the side button in sell mode)
+    const coin = posSide === 'yes' ? market.yesCoin : market.noCoin
+    const book = useOrderBookStore.getState().books[coin]
+    const bestBid = book?.bids?.length ? parseFloat(book.bids[0].px) : 0
+    const mid = useMarketStore.getState().mids[coin]
+    const midPrice = mid ? parseFloat(mid) : 0.5
+    const fillPrice = bestBid > 0 ? bestBid : midPrice
+    setPrice(String(Math.floor(fillPrice * 100)))
+  }, [setTradeSide, market.yesCoin, market.noCoin])
+
+  useEffect(() => {
+    window.addEventListener('verity:sell-position', handleSellPosition)
+    return () => window.removeEventListener('verity:sell-position', handleSellPosition)
+  }, [handleSellPosition])
+
   // Subscribe to book data directly so we re-render when books update
   const books = useOrderBookStore((s) => s.books)
-  const fetchBook = useOrderBookStore((s) => s.fetchBook)
 
   // Quote balance from dynamic coin
   const quoteBalance = getBalance(outcomeQuoteCoin)
@@ -100,8 +120,11 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
   const total = priceDecimal * shareCount
   const toWin = shareCount // Each share pays $1 if correct
   const multiplier = priceDecimal > 0 ? 1 / priceDecimal : 0
-  const minShares = priceDecimal > 0 ? Math.ceil(MIN_ORDER_VALUE / priceDecimal) : 0
-  const belowMin = shareCount > 0 && total < MIN_ORDER_VALUE
+  // HL evaluates minimum order value using the mid price, not the limit price
+  const currentMid = side === 'yes' ? yesMid : noMid
+  const effectivePrice = Math.min(priceDecimal, currentMid > 0 ? currentMid : priceDecimal)
+  const minShares = effectivePrice > 0 ? Math.ceil(MIN_ORDER_VALUE / effectivePrice) + 1 : 0
+  const belowMin = shareCount > 0 && effectivePrice * shareCount < MIN_ORDER_VALUE
 
   const assetId = side === 'yes' ? market.yesAssetId : market.noAssetId
 
@@ -198,10 +221,6 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
         toast.success('Order placed!')
       }
       setShares('')
-
-      // Refetch book to reflect the new order (WS may be delayed)
-      fetchBook(market.yesCoin)
-      fetchBook(market.noCoin)
     } catch (err) {
       const msg = (err as Error).message
       if (msg.includes('does not exist')) {
