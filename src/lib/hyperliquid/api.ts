@@ -6,6 +6,7 @@ import type {
   Candle,
   SpotClearinghouseState,
   OpenOrder,
+  Fill,
 } from './types'
 
 async function postInfo<T>(body: Record<string, unknown>): Promise<T> {
@@ -93,6 +94,21 @@ export function fetchMaxBuilderFee(
   builder: string
 ): Promise<number> {
   return postInfo<number>({ type: 'maxBuilderFee', user, builder })
+}
+
+export function fetchUserFillsByTime(
+  user: string,
+  startTime: number,
+  endTime?: number
+): Promise<Fill[]> {
+  const req: Record<string, unknown> = {
+    type: 'userFillsByTime',
+    user,
+    startTime,
+    aggregateByTime: true,
+  }
+  if (endTime !== undefined) req.endTime = endTime
+  return postInfo<Fill[]>(req)
 }
 
 export function fetchSettledOutcome(outcome: number): Promise<SettledOutcome> {

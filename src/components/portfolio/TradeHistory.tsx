@@ -38,6 +38,9 @@ function fullDate(ts: number): string {
 
 export function TradeHistory({ search = '' }: { search?: string }) {
   const fills = usePortfolioStore((s) => s.fills)
+  const loadMoreFills = usePortfolioStore((s) => s.loadMoreFills)
+  const loadingMore = usePortfolioStore((s) => s.loadingMore)
+  const hasMoreFills = usePortfolioStore((s) => s.hasMoreFills)
   const markets = useMarketStore((s) => s.markets)
   const settledOutcomes = useMarketStore((s) => s.settledOutcomes)
   const getSettledMarket = useMarketStore((s) => s.getSettledMarket)
@@ -216,6 +219,21 @@ export function TradeHistory({ search = '' }: { search?: string }) {
           </tbody>
         </table>
       </div>
+
+      {/* Show more button */}
+      {hasMoreFills && !search && (
+        <button
+          onClick={loadMoreFills}
+          disabled={loadingMore}
+          className="w-full py-3 text-sm text-gray-400 hover:text-gray-200 border-t border-white/5 transition-colors disabled:opacity-50"
+        >
+          {loadingMore ? (
+            <span className="animate-pulse">Loading...</span>
+          ) : (
+            'Show more history'
+          )}
+        </button>
+      )}
     </div>
   )
 }

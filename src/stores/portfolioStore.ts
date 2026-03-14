@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { fetchOpenOrders } from '@/lib/hyperliquid/api'
+import { fetchOpenOrders, fetchUserFillsByTime } from '@/lib/hyperliquid/api'
 import { hlWebSocket } from '@/lib/hyperliquid/websocket'
 import { getSwapPairCoin } from '@/lib/hyperliquid/encoding'
 import { useMarketStore } from '@/stores/marketStore'
@@ -22,9 +22,13 @@ interface PortfolioStore {
   openOrders: OpenOrder[]
   fills: Fill[]
   loading: boolean
+  loadingMore: boolean
+  /** False when all available history has been fetched */
+  hasMoreFills: boolean
   userAddress: string | null
   subscribePortfolio: (address: string) => void
   unsubscribePortfolio: () => void
+  loadMoreFills: () => Promise<void>
   getBalance: (coin: string) => number
 }
 
@@ -34,10 +38,12 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => ({
   openOrders: [],
   fills: [],
   loading: false,
+  loadingMore: false,
+  hasMoreFills: true,
   userAddress: null,
 
   subscribePortfolio: (address: string) => {
-    set({ userAddress: address, loading: true })
+    set({ userAddress: address, loading: true, hasMoreFills: true })
 
     const swapCoin = getSwapPairCoin(useMarketStore.getState().spotMeta)
     const isRelevantFill = (f: Fill) =>
@@ -80,10 +86,11 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => ({
 
         if (isSnapshot) {
           // Snapshot arrives oldest-first; reverse so newest is first
-          set({ fills: relevant.reverse().slice(0, 100), loading: false })
+          const trimmed = relevant.reverse().slice(0, 50)
+          set({ fills: trimmed, hasMoreFills: trimmed.length >= 50, loading: false })
         } else {
           set((state) => ({
-            fills: [...relevant, ...state.fills].slice(0, 100),
+            fills: [...relevant, ...state.fills],
           }))
         }
       }
@@ -110,7 +117,44 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => ({
     hlWebSocket.unsubscribe('spotState')
     hlWebSocket.unsubscribe('orderUpdates')
     hlWebSocket.unsubscribe('userFills')
-    set({ userAddress: null, spotBalances: {}, balances: [], openOrders: [], fills: [] })
+    set({ userAddress: null, spotBalances: {}, balances: [], openOrders: [], fills: [], hasMoreFills: true })
+  },
+
+  loadMoreFills: async () => {
+    const { userAddress, fills, loadingMore, hasMoreFills } = get()
+    if (!userAddress || loadingMore || !hasMoreFills) return
+
+    set({ loadingMore: true })
+
+    try {
+      // Use oldest fill's timestamp as endTime boundary
+      const oldestFill = fills[fills.length - 1]
+      const endTime = oldestFill ? oldestFill.time - 1 : Date.now()
+      // Go back far enough to find fills (90 days window, API returns up to 2000)
+      const startTime = endTime - 90 * 24 * 60 * 60 * 1000
+
+      const rawFills = await fetchUserFillsByTime(userAddress, startTime, endTime)
+
+      const swapCoin = getSwapPairCoin(useMarketStore.getState().spotMeta)
+      const relevant = rawFills.filter(
+        (f) => f.coin.startsWith('#') || (swapCoin && f.coin === swapCoin)
+      )
+
+      // API returns oldest-first; reverse for newest-first
+      relevant.reverse()
+
+      // Deduplicate by tid
+      const existingTids = new Set(fills.map((f) => f.tid))
+      const newFills = relevant.filter((f) => !existingTids.has(f.tid))
+
+      set({
+        fills: [...fills, ...newFills],
+        hasMoreFills: newFills.length > 0,
+        loadingMore: false,
+      })
+    } catch {
+      set({ loadingMore: false })
+    }
   },
 
   getBalance: (coin: string) => get().spotBalances[coin] ?? 0,
