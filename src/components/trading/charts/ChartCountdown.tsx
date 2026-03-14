@@ -67,13 +67,7 @@ function CountdownTimer({ expiry }: { expiry: string }) {
 
 function GoToLiveMarketButton({ market }: { market: ParsedMarket }) {
   const markets = useMarketStore((s) => s.markets)
-  const fetchMarkets = useMarketStore((s) => s.fetchMarkets)
   const liveMarket = findLiveMarket(market, markets)
-
-  // Refetch markets on mount to pick up newly created live instances
-  useEffect(() => {
-    fetchMarkets()
-  }, [fetchMarkets])
 
   if (!liveMarket) {
     return (

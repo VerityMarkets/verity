@@ -3,6 +3,7 @@ export type ChartType = 'probability' | 'ticker' | 'candles'
 interface ChartTypeSelectorProps {
   activeType: ChartType
   onSelect: (type: ChartType) => void
+  showProbability?: boolean
   showTicker: boolean
   showCandles: boolean
 }
@@ -36,25 +37,28 @@ function IconButton({
 export function ChartTypeSelector({
   activeType,
   onSelect,
+  showProbability = true,
   showTicker,
   showCandles,
 }: ChartTypeSelectorProps) {
-  const hasMultiple = showTicker || showCandles
-  if (!hasMultiple) return null
+  const visibleCount = (showProbability ? 1 : 0) + (showTicker ? 1 : 0) + (showCandles ? 1 : 0)
+  if (visibleCount < 2) return null
 
   return (
     <div className="flex items-center gap-0.5 justify-end mt-2">
       {/* Probability / line chart */}
-      <IconButton
-        active={activeType === 'probability'}
-        onClick={() => onSelect('probability')}
-        title="Probability"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3 18l6-8 4 5 8-11" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M17 4h4v4" />
-        </svg>
-      </IconButton>
+      {showProbability && (
+        <IconButton
+          active={activeType === 'probability'}
+          onClick={() => onSelect('probability')}
+          title="Probability"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 18l6-8 4 5 8-11" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17 4h4v4" />
+          </svg>
+        </IconButton>
+      )}
 
       {/* Real-time ticker / pulse */}
       {showTicker && (

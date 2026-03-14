@@ -15,9 +15,11 @@ import type { ParsedMarket } from '@/lib/hyperliquid/types'
 interface ChartContainerProps {
   market: ParsedMarket
   settled?: boolean
+  settlementPrice?: number
+  settlementResult?: 'yes' | 'no' | null
 }
 
-export function ChartContainer({ market, settled }: ChartContainerProps) {
+export function ChartContainer({ market, settled, settlementPrice, settlementResult }: ChartContainerProps) {
   const mid = useMainnetMid(market.underlying)
   const tradeSide = useMarketStore((s) => s.tradeSide)
   const mids = useMarketStore((s) => s.mids)
@@ -26,8 +28,13 @@ export function ChartContainer({ market, settled }: ChartContainerProps) {
   const periodMinutes = parsePeriodMinutes(market.period)
   const isShortBinary = isBinary && periodMinutes > 0 && periodMinutes <= 15
 
-  // Default to ticker chart for short binary markets, probability otherwise
-  const [chartType, setChartType] = useState<ChartType>(isShortBinary ? 'ticker' : 'probability')
+  const showProbability = !settled
+
+  // Default: ticker for short binary, candles for settled binary, probability otherwise
+  const defaultChart: ChartType = settled
+    ? (isShortBinary ? 'ticker' : isBinary ? 'candles' : 'ticker')
+    : (isShortBinary ? 'ticker' : 'probability')
+  const [chartType, setChartType] = useState<ChartType>(defaultChart)
 
   const isExpired = useMemo(() => {
     if (settled) return true
@@ -40,10 +47,13 @@ export function ChartContainer({ market, settled }: ChartContainerProps) {
 
   // Reset chart type if it becomes unavailable
   const effectiveType = useMemo(() => {
-    if (chartType === 'ticker' && !isShortBinary) return 'probability'
-    if (chartType === 'candles' && !isBinary) return 'probability'
+    if (chartType === 'probability' && !showProbability) {
+      return isShortBinary ? 'ticker' : isBinary ? 'candles' : 'ticker'
+    }
+    if (chartType === 'ticker' && !isShortBinary) return showProbability ? 'probability' : 'candles'
+    if (chartType === 'candles' && !isBinary) return showProbability ? 'probability' : 'ticker'
     return chartType
-  }, [chartType, isShortBinary, isBinary])
+  }, [chartType, isShortBinary, isBinary, showProbability])
 
   const showUnderlying = effectiveType === 'ticker' || effectiveType === 'candles'
 
@@ -56,6 +66,7 @@ export function ChartContainer({ market, settled }: ChartContainerProps) {
             underlying={market.underlying}
             targetPrice={market.targetPrice}
             currentPrice={currentPrice}
+            settlementPrice={settlementPrice}
           />
           <div className="mt-1 mr-1">
             <ChartCountdown
@@ -75,7 +86,7 @@ export function ChartContainer({ market, settled }: ChartContainerProps) {
       )}
 
       {/* Chart area */}
-      {effectiveType === 'probability' && (
+      {effectiveType === 'probability' && !settled && (
         <ProbabilityChart coin={market.yesCoin} />
       )}
       {effectiveType === 'ticker' && (
@@ -89,6 +100,9 @@ export function ChartContainer({ market, settled }: ChartContainerProps) {
           underlying={market.underlying}
           targetPrice={market.targetPrice}
           periodMinutes={periodMinutes}
+          settlementPrice={settlementPrice}
+          settlementResult={settlementResult}
+          expiry={settled ? market.expiry : undefined}
         />
       )}
 
@@ -96,6 +110,7 @@ export function ChartContainer({ market, settled }: ChartContainerProps) {
       <ChartTypeSelector
         activeType={effectiveType}
         onSelect={setChartType}
+        showProbability={showProbability}
         showTicker={isShortBinary}
         showCandles={isBinary}
       />
@@ -141,7 +156,7 @@ function ProbabilityHeader({
             isExpired={isExpired}
           />
         )}
-        <VerityWordmark className="h-7 text-gray-600 mr-8" mono />
+        {!isExpired && <VerityWordmark className="h-7 text-gray-600 mr-8" mono />}
       </div>
     </div>
   )

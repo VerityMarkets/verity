@@ -151,9 +151,6 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
     // Use agent signer if available (validated against current address), otherwise fall back to dev wallet only if injected
     const agentSigner = getAgentSigner(address)
     const signer = agentSigner ?? (DEV_MODE && devWalletInjected ? getDevSigner() : null)
-    console.log('[Trade] signer source:', agentSigner ? 'agent' : devWalletInjected ? 'devWallet' : 'none',
-      '| agent address:', agentSigner?.address ?? 'n/a',
-      '| wallet address:', address)
     if (!isConnected || !address) {
       toast.error('Connect your wallet first')
       return

@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
-// Link still used for "market not found" fallback
 import { useMarketStore } from '@/stores/marketStore'
 import { useOrderBookStore } from '@/stores/orderbookStore'
 import { useChatStore } from '@/stores/chatStore'
@@ -18,24 +17,28 @@ type BookTab = 'book' | 'trades'
 
 export function MarketPage() {
   const { id } = useParams<{ id: string }>()
-  const getMarketOrExpired = useMarketStore((s) => s.getMarketOrExpired)
-  const isSettled = useMarketStore((s) => s.isSettled)
-  const getSettlementResult = useMarketStore((s) => s.getSettlementResult)
+  const getMarket = useMarketStore((s) => s.getMarket)
+  const getSettledMarket = useMarketStore((s) => s.getSettledMarket)
+  const fetchSettledMarket = useMarketStore((s) => s.fetchSettledMarket)
   const loading = useMarketStore((s) => s.loading)
-  const markets = useMarketStore((s) => s.markets)
-  const allOutcomes = useMarketStore((s) => s.allOutcomes)
   const selectMarket = useMarketStore((s) => s.selectMarket)
   const tradeSide = useMarketStore((s) => s.tradeSide)
-
   const setFilter = useChatStore((s) => s.setFilter)
 
+  const [loadingSettledMarket, setLoadingSettledMarket] = useState(false)
   const [bookOpen, setBookOpen] = useState(false)
   const [bookTab, setBookTab] = useState<BookTab>('book')
 
   const marketId = id ? parseInt(id, 10) : null
-  const market = marketId !== null ? getMarketOrExpired(marketId) : undefined
-  const settled = market ? isSettled(market.outcomeId) : false
-  const settlementResult = market ? getSettlementResult(market.outcomeId) : null
+
+  // Read market: active first, then settled cache
+  const activeMarket = marketId !== null ? getMarket(marketId) : undefined
+  const settledInfo = marketId !== null ? getSettledMarket(marketId) : undefined
+  const market = activeMarket ?? settledInfo?.market
+  const settled = !activeMarket && !!settledInfo
+  const settlementResult = settled
+    ? (parseFloat(settledInfo!.settleFraction) === 1 ? 'yes' : 'no')
+    : null
 
   const isExpired = useMemo(() => {
     if (settled) return true
@@ -43,7 +46,7 @@ export function MarketPage() {
     const expDate = parseExpiry(market.expiry)
     if (!expDate) return false
     return expDate.getTime() <= Date.now()
-  }, [market?.expiry, settled])
+  }, [market, settled])
 
   const activeCoin = market
     ? (tradeSide === 'yes' ? market.yesCoin : market.noCoin)
@@ -58,19 +61,16 @@ export function MarketPage() {
   const subscribeBook = useOrderBookStore((s) => s.subscribeBook)
   const unsubscribeAll = useOrderBookStore((s) => s.unsubscribeAll)
 
-  const fetchMarkets = useMarketStore((s) => s.fetchMarkets)
-
   const chatGroup = market ? getChatGroup(market) : null
 
-  // Refresh markets on every navigation to a market page
-  useEffect(() => {
-    fetchMarkets()
-  }, [fetchMarkets])
-
-  // Select market on navigation
+  // Select market / load settled outcome on navigation
   useEffect(() => {
     if (marketId !== null) {
       selectMarket(marketId)
+      if (!activeMarket && !settledInfo) {
+        setLoadingSettledMarket(true)
+        fetchSettledMarket(marketId).finally(() => setLoadingSettledMarket(false))
+      }
     }
     return () => {
       selectMarket(null)
@@ -90,13 +90,14 @@ export function MarketPage() {
   }, [marketId, chatGroup?.key])
 
   useEffect(() => {
-    if (!market || settled) return
-    fetchBook(market.yesCoin)
-    fetchBook(market.noCoin)
-    subscribeBook(market.yesCoin)
-    subscribeBook(market.noCoin)
+    if (!activeMarket) return
+    fetchBook(activeMarket.yesCoin)
+    fetchBook(activeMarket.noCoin)
+    subscribeBook(activeMarket.yesCoin)
+    subscribeBook(activeMarket.noCoin)
     return () => unsubscribeAll()
-  }, [market?.yesCoin, market?.noCoin, settled])
+  }, [activeMarket?.yesCoin, activeMarket?.noCoin])
+
   const trollboxMarket = chatGroup
     ? { id: chatGroup.key, label: chatGroup.label }
     : undefined
@@ -109,7 +110,7 @@ export function MarketPage() {
       }
     : undefined
 
-  if (loading || (markets.length === 0 && allOutcomes.length === 0)) {
+  if (loading || loadingSettledMarket) {
     return (
       <div className="card p-8 text-center">
         <div className="animate-pulse text-gray-400 text-sm">Loading market...</div>
@@ -135,6 +136,10 @@ export function MarketPage() {
     const winnerColor = winnerSide === 0 ? 'text-yes' : 'text-no'
     const winnerBg = winnerSide === 0 ? 'bg-yes/10' : 'bg-no/10'
 
+    // Parse settlement price from details (e.g. "price:70082")
+    const detailsParsed = settledInfo!.details.split(':')
+    const settlementPrice = detailsParsed.length === 2 ? parseFloat(detailsParsed[1]) : undefined
+
     return (
       <div>
         <MarketHeader market={market} settled settlementResult={settlementResult} />
@@ -142,7 +147,7 @@ export function MarketPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
           {/* Left: Chart */}
           <div className="lg:col-span-2">
-            <ChartContainer market={market} settled />
+            <ChartContainer market={market} settled settlementPrice={settlementPrice} settlementResult={settlementResult} />
           </div>
 
           {/* Right: Result card */}
@@ -156,11 +161,16 @@ export function MarketPage() {
               <div className={`text-lg font-bold ${winnerColor} mb-1`}>
                 Outcome: {winnerName}
               </div>
-              <div className="text-sm text-gray-400">
-                {market.name}
-              </div>
-              <div className="text-xs text-gray-500 mt-2">
+              {settlementPrice !== undefined && (
+                <div className={`text-sm font-mono ${winnerColor} mb-1`}>
+                  ${settlementPrice.toLocaleString()}
+                </div>
+              )}
+              <div className="text-xs text-gray-500 mt-3">
                 This market has been resolved.
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                Your shares have been settled and paid out automatically.
               </div>
             </div>
           </div>

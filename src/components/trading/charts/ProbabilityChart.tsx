@@ -3,7 +3,7 @@ import { createChart, AreaSeries } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts'
 import { fetchCandles } from '@/lib/hyperliquid/api'
 import { useMarketStore } from '@/stores/marketStore'
-import { getBaseChartOptions } from './chartUtils'
+import { getBaseChartOptions, toLocalChartTime, LOCAL_TZ_OFFSET_SEC } from './chartUtils'
 
 export function ProbabilityChart({ coin }: { coin: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -41,14 +41,14 @@ export function ProbabilityChart({ coin }: { coin: string }) {
     fetchCandles(coin, '5m', dayAgo, now).then((candles) => {
       if (candles.length > 0) {
         const data = candles.map((c) => ({
-          time: Math.floor(c.t / 1000) as Time,
+          time: toLocalChartTime(c.t) as Time,
           value: parseFloat(c.c),
         }))
         series.setData(data)
         chart.timeScale().fitContent()
         lastTimeRef.current = data[data.length - 1].time as number
       }
-    })
+    }).catch(() => { /* coin may be delisted/settled */ })
 
     const resizeObserver = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect
@@ -70,7 +70,7 @@ export function ProbabilityChart({ coin }: { coin: string }) {
     const value = parseFloat(mid)
     if (isNaN(value)) return
 
-    const now = Math.floor(Date.now() / 1000)
+    const now = toLocalChartTime(Date.now())
     if (now <= lastTimeRef.current) return
     lastTimeRef.current = now
 

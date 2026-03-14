@@ -1,8 +1,14 @@
 import { create } from 'zustand'
-import { fetchOutcomeMeta, fetchAllMids, fetchSpotMeta } from '@/lib/hyperliquid/api'
+import { fetchOutcomeMeta, fetchAllMids, fetchSpotMeta, fetchSettledOutcome } from '@/lib/hyperliquid/api'
 import { hlWebSocket } from '@/lib/hyperliquid/websocket'
 import { toCoin, toAssetId } from '@/lib/hyperliquid/encoding'
-import type { ParsedMarket, AllMids, SpotMeta, Outcome, Question } from '@/lib/hyperliquid/types'
+import type { ParsedMarket, AllMids, SpotMeta, Outcome } from '@/lib/hyperliquid/types'
+
+interface SettledMarketInfo {
+  market: ParsedMarket
+  settleFraction: string
+  details: string
+}
 
 function parseDescription(desc: string): Record<string, string> {
   const parts: Record<string, string> = {}
@@ -58,8 +64,8 @@ function deriveOutcomeQuoteCoin(spotMeta: SpotMeta): string {
 
 interface MarketStore {
   markets: ParsedMarket[]
-  allOutcomes: Outcome[]
-  questions: Question[]
+  /** Settled outcomes fetched on-demand, keyed by outcomeId (pre-parsed, stable refs) */
+  settledOutcomes: Map<number, SettledMarketInfo>
   mids: AllMids
   spotMeta: SpotMeta | null
   outcomeQuoteCoin: string
@@ -73,17 +79,15 @@ interface MarketStore {
   selectMarket: (id: number | null) => void
   setTradeSide: (side: 'yes' | 'no') => void
   getMarket: (id: number) => ParsedMarket | undefined
-  getMarketOrExpired: (id: number) => ParsedMarket | undefined
-  isSettled: (outcomeId: number) => boolean
-  getSettlementResult: (outcomeId: number) => 'yes' | 'no' | null
+  getSettledMarket: (outcomeId: number) => SettledMarketInfo | undefined
+  fetchSettledMarket: (outcomeId: number) => Promise<void>
   getYesPrice: (market: ParsedMarket) => number
   getNoPrice: (market: ParsedMarket) => number
 }
 
 export const useMarketStore = create<MarketStore>((set, get) => ({
   markets: [],
-  allOutcomes: [],
-  questions: [],
+  settledOutcomes: new Map(),
   mids: {},
   spotMeta: null,
   outcomeQuoteCoin: '',
@@ -118,8 +122,6 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
 
       set({
         markets,
-        allOutcomes: meta.outcomes,
-        questions: meta.questions,
         mids,
         spotMeta,
         outcomeQuoteCoin,
@@ -149,47 +151,27 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
 
   getMarket: (id) => get().markets.find((m) => m.outcomeId === id),
 
-  getMarketOrExpired: (id) => {
-    // Check active markets first
-    const active = get().markets.find((m) => m.outcomeId === id)
-    if (active) return active
-
-    // Fall back to all outcomes (includes expired/settled)
-    const outcome = get().allOutcomes.find((o) => o.outcome === id)
-    if (!outcome) return undefined
-
-    return outcomeToParsedMarket(outcome)
+  getSettledMarket: (outcomeId) => {
+    return get().settledOutcomes.get(outcomeId)
   },
 
-  isSettled: (outcomeId) => {
-    const { questions } = get()
-    for (const q of questions) {
-      // Check if this outcome belongs to any question that has settled outcomes
-      if (
-        q.namedOutcomes.includes(outcomeId) ||
-        q.fallbackOutcome === outcomeId
-      ) {
-        return q.settledNamedOutcomes.length > 0
-      }
-    }
-    return false
-  },
+  fetchSettledMarket: async (outcomeId) => {
+    // Already cached — skip
+    if (get().settledOutcomes.has(outcomeId)) return
 
-  getSettlementResult: (outcomeId) => {
-    const { questions } = get()
-    for (const q of questions) {
-      if (
-        q.namedOutcomes.includes(outcomeId) ||
-        q.fallbackOutcome === outcomeId
-      ) {
-        if (q.settledNamedOutcomes.length === 0) return null
-        // If this outcome is in the settled list, it resolved Yes
-        if (q.settledNamedOutcomes.includes(outcomeId)) return 'yes'
-        // Otherwise it resolved No
-        return 'no'
+    try {
+      const settled = await fetchSettledOutcome(outcomeId)
+      const info: SettledMarketInfo = {
+        market: outcomeToParsedMarket(settled.spec),
+        settleFraction: settled.settleFraction,
+        details: settled.details,
       }
+      const newMap = new Map(get().settledOutcomes)
+      newMap.set(outcomeId, info)
+      set({ settledOutcomes: newMap })
+    } catch {
+      // Not a settled outcome or API error — ignore
     }
-    return null
   },
 
   getYesPrice: (market) => {

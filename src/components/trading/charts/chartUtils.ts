@@ -49,6 +49,14 @@ export function getBaseChartOptions(): DeepPartial<ChartOptions> {
   }
 }
 
+/** Offset in seconds to shift UTC timestamps to local time for lightweight-charts */
+export const LOCAL_TZ_OFFSET_SEC = new Date().getTimezoneOffset() * -60
+
+/** Convert a UTC millisecond timestamp to a lightweight-charts local Time value */
+export function toLocalChartTime(utcMs: number): number {
+  return Math.floor(utcMs / 1000) + LOCAL_TZ_OFFSET_SEC
+}
+
 export function findLiveMarket(
   expiredMarket: ParsedMarket,
   allMarkets: ParsedMarket[]

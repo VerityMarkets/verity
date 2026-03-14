@@ -25,6 +25,12 @@ export interface OutcomeMeta {
   questions: Question[]
 }
 
+export interface SettledOutcome {
+  spec: Outcome
+  settleFraction: string
+  details: string
+}
+
 // --- Parsed market info ---
 
 export interface ParsedMarket {

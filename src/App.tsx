@@ -60,7 +60,7 @@ function PortfolioSync() {
   const spotMeta = useMarketStore((s) => s.spotMeta)
 
   useEffect(() => {
-    if (!address) return
+    if (!address || !spotMeta) return
     fetchPortfolio(address)
     subscribePortfolio(address)
     const interval = setInterval(() => fetchPortfolio(address), 15_000)
@@ -68,12 +68,7 @@ function PortfolioSync() {
       clearInterval(interval)
       unsubscribePortfolio()
     }
-  }, [address])
-
-  // Re-fetch once spotMeta loads so swap fills are included
-  useEffect(() => {
-    if (address && spotMeta) fetchPortfolio(address)
-  }, [spotMeta !== null])
+  }, [address, spotMeta !== null])
 
   return null
 }

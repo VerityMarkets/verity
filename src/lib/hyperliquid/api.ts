@@ -1,6 +1,7 @@
 import { API_URL } from '@/config'
 import type {
   OutcomeMeta,
+  SettledOutcome,
   AllMids,
   SpotMeta,
   L2Book,
@@ -112,4 +113,8 @@ export function fetchMaxBuilderFee(
   builder: string
 ): Promise<number> {
   return postInfo<number>({ type: 'maxBuilderFee', user, builder })
+}
+
+export function fetchSettledOutcome(outcome: number): Promise<SettledOutcome> {
+  return postInfo<SettledOutcome>({ type: 'settledOutcome', outcome })
 }

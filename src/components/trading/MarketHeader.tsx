@@ -1,7 +1,27 @@
 import { useMarketStore } from '@/stores/marketStore'
 import { useOrderBookStore } from '@/stores/orderbookStore'
 import { MarketTimer } from '../markets/MarketTimer'
+import { parseExpiry } from './charts/chartUtils'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
+
+function formatExpiryDateTime(expiry: string): string | null {
+  const date = parseExpiry(expiry)
+  if (!date) return null
+  const formatted = date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+  // Append UTC offset (e.g. "UTC-7")
+  const offsetMin = date.getTimezoneOffset()
+  const sign = offsetMin <= 0 ? '+' : '-'
+  const absHours = Math.floor(Math.abs(offsetMin) / 60)
+  const absMin = Math.abs(offsetMin) % 60
+  const utcLabel = absMin > 0 ? `UTC${sign}${absHours}:${String(absMin).padStart(2, '0')}` : `UTC${sign}${absHours}`
+  return `${formatted.replace(/\bam\b/i, 'AM').replace(/\bpm\b/i, 'PM')} (${utcLabel})`
+}
 
 interface MarketHeaderProps {
   market: ParsedMarket
@@ -58,8 +78,12 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
           <h1 className="text-lg font-bold text-gray-100">
             {isRecurring ? (
               <>
-                Will {market.underlying} be above $
-                {market.targetPrice.toLocaleString()}?
+                {market.underlying} above ${market.targetPrice.toLocaleString()}
+                {market.expiry && (
+                  <span className="text-gray-400 font-normal">
+                    {' '}on {formatExpiryDateTime(market.expiry)}?
+                  </span>
+                )}
               </>
             ) : (
               market.name

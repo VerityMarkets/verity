@@ -16,7 +16,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const fetchMarkets = useMarketStore((s) => s.fetchMarkets)
   const subscribeMids = useMarketStore((s) => s.subscribeMids)
   const selectedMarketId = useMarketStore((s) => s.selectedMarketId)
-  const getMarketOrExpired = useMarketStore((s) => s.getMarketOrExpired)
+  const getMarket = useMarketStore((s) => s.getMarket)
   const subscribeChat = useChatStore((s) => s.subscribeChat)
   const nostrPubkey = useChatStore((s) => s.nostrPubkey)
   const setIdentity = useChatStore((s) => s.setIdentity)
@@ -24,7 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const setChatOpen = useChatStore((s) => s.setOpen)
 
   // Build market context for mobile Trollbox
-  const selectedMarket = selectedMarketId !== null ? getMarketOrExpired(selectedMarketId) : undefined
+  const selectedMarket = selectedMarketId !== null ? getMarket(selectedMarketId) : undefined
   const chatGroup = selectedMarket ? getChatGroup(selectedMarket) : null
   const trollboxMarket = chatGroup
     ? { id: chatGroup.key, label: chatGroup.label }
@@ -52,7 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       hlWebSocket.disconnect()
       clearInterval(marketPoll)
     }
-  }, [])
+  }, [fetchMarkets])
 
   // Silently restore Nostr identity from cached signature
   useEffect(() => {
