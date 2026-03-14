@@ -16,6 +16,7 @@ import { IS_TESTNET, DEV_MODE } from './config'
 import { devWalletInjected } from './lib/devWallet'
 import { usePortfolioStore } from './stores/portfolioStore'
 import { useMarketStore } from './stores/marketStore'
+import { useAgentStore } from './stores/agentStore'
 import { AppShell } from './components/layout/AppShell'
 import { HomePage } from './pages/HomePage'
 import { MarketPage } from './pages/MarketPage'
@@ -51,6 +52,24 @@ function DevAutoConnect() {
   return null
 }
 
+/** Load agent wallet + validate builder fee once when wallet connects. */
+function AgentSync() {
+  const { address } = useAccount()
+  const loadAgent = useAgentStore((s) => s.load)
+  const clearAgent = useAgentStore((s) => s.clear)
+
+  useEffect(() => {
+    if (address) {
+      loadAgent(address)
+      useAgentStore.getState().revalidate()
+    } else {
+      clearAgent()
+    }
+  }, [address, loadAgent, clearAgent])
+
+  return null
+}
+
 /** Subscribe to portfolio updates once when wallet connects. */
 function PortfolioSync() {
   const { address } = useAccount()
@@ -82,6 +101,7 @@ export default function App() {
           })}
         >
           {DEV_MODE && <DevAutoConnect />}
+          <AgentSync />
           <PortfolioSync />
           <AppShell>
             <Routes>

@@ -62,19 +62,23 @@ export function MarketPage() {
 
   const chatGroup = market ? getChatGroup(market) : null
 
-  // Select market / load settled outcome on navigation
+  // Select market on navigation
   useEffect(() => {
     if (marketId !== null) {
       selectMarket(marketId)
-      if (!activeMarket && !settledInfo) {
-        setLoadingSettledMarket(true)
-        fetchSettledMarket(marketId).finally(() => setLoadingSettledMarket(false))
-      }
     }
     return () => {
       selectMarket(null)
     }
   }, [marketId])
+
+  // Fetch settled outcome when market isn't active (initial load or mid-session settlement)
+  useEffect(() => {
+    if (marketId !== null && !activeMarket && !settledInfo) {
+      setLoadingSettledMarket(true)
+      fetchSettledMarket(marketId).finally(() => setLoadingSettledMarket(false))
+    }
+  }, [marketId, !activeMarket, !settledInfo])
 
   // Set chat filter to group key (e.g. "bo:BTC:1d") once market resolves
   useEffect(() => {

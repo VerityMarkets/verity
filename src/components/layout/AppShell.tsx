@@ -4,7 +4,6 @@ import { useAccount } from 'wagmi'
 import { Header } from './Header'
 import { MobileNav } from './MobileNav'
 import { Trollbox } from '@/components/chat/Trollbox'
-import { hlWebSocket } from '@/lib/hyperliquid/websocket'
 import { useMarketStore } from '@/stores/marketStore'
 import { useChatStore } from '@/stores/chatStore'
 import { restoreNostrKeypair } from '@/lib/nostr/identity'
@@ -40,7 +39,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { address, isConnected } = useAccount()
 
   useEffect(() => {
-    hlWebSocket.connect()
     fetchMarkets()
     subscribeMids()
     subscribeChat()
@@ -49,7 +47,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     const marketPoll = setInterval(() => fetchMarkets(), 61_000)
 
     return () => {
-      hlWebSocket.disconnect()
       clearInterval(marketPoll)
     }
   }, [fetchMarkets])

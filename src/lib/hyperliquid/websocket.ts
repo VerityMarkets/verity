@@ -101,6 +101,8 @@ class HyperliquidWebSocket {
   }
 
   subscribe(id: string, subscription: WsSubscription, handler: MessageHandler) {
+    // Skip if already subscribed with the same ID (prevents redundant WS messages)
+    if (this.subscriptions.has(id)) return
     this.subscriptions.set(id, { subscription, handler })
     this.sendSubscribe(subscription)
   }
@@ -125,3 +127,7 @@ class HyperliquidWebSocket {
 }
 
 export const hlWebSocket = new HyperliquidWebSocket()
+
+// Connect eagerly — the singleton manages its own reconnection.
+// No React component should call connect()/disconnect().
+hlWebSocket.connect()

@@ -97,7 +97,9 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
   tradeSide: 'yes' as const,
 
   fetchMarkets: async () => {
-    set({ loading: true, error: null })
+    const isInitial = get().markets.length === 0
+    if (isInitial) set({ loading: true })
+    set({ error: null })
     try {
       const [meta, spotMeta] = await Promise.all([
         fetchOutcomeMeta(),

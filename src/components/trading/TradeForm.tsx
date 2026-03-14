@@ -48,11 +48,10 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
   const loadAgent = useAgentStore((s) => s.load)
   const clearAgent = useAgentStore((s) => s.clear)
 
-  // Load agent from localStorage when wallet connects, then validate once against API
+  // Load agent from localStorage when wallet connects
   useEffect(() => {
     if (address) {
       loadAgent(address)
-      useAgentStore.getState().revalidate()
     } else {
       clearAgent()
     }
@@ -232,7 +231,7 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
         useAgentStore.setState({ agentKey: null, agentAddress: null, builderFeeApproved: false, error: null })
       } else if (msg.includes('Builder fee has not been approved')) {
         // Builder fee not approved — keep agent, just need fee approval
-        toast.error('Builder fee needs approval')
+        toast.error('Builder code needs approval')
         useAgentStore.setState({ builderFeeApproved: false })
       } else {
         toast.error(msg.slice(0, 80))
