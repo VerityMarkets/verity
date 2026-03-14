@@ -119,11 +119,15 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
   const total = priceDecimal * shareCount
   const toWin = shareCount // Each share pays $1 if correct
   const multiplier = priceDecimal > 0 ? 1 / priceDecimal : 0
-  // HL evaluates minimum order value using the mid price, not the limit price
-  const currentMid = side === 'yes' ? yesMid : noMid
-  const effectivePrice = Math.min(priceDecimal, currentMid > 0 ? currentMid : priceDecimal)
-  const minShares = effectivePrice > 0 ? Math.ceil(MIN_ORDER_VALUE / effectivePrice) + 1 : 0
-  const belowMin = shareCount > 0 && effectivePrice * shareCount < MIN_ORDER_VALUE
+  // HL evaluates minimum order value using best bid (buy) / best ask (sell), fallback to mid
+  const hlBid = side === 'yes' ? yesBestBid : noBestBid
+  const hlAsk = side === 'yes' ? yesBestAsk : noBestAsk
+  const hlMid = side === 'yes' ? yesMid : noMid
+  const hlRefPrice = orderType === 'buy'
+    ? (hlBid > 0 ? hlBid : hlMid)
+    : (hlAsk > 0 ? hlAsk : hlMid)
+  const minShares = hlRefPrice > 0 ? Math.ceil(MIN_ORDER_VALUE / hlRefPrice) : 0
+  const belowMin = shareCount > 0 && hlRefPrice > 0 && hlRefPrice * shareCount < MIN_ORDER_VALUE
 
   const assetId = side === 'yes' ? market.yesAssetId : market.noAssetId
 
