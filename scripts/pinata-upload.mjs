@@ -37,11 +37,7 @@ async function collectFiles(dir) {
 
 async function main() {
   const pinata = new PinataSDK({ pinataJwt: PINATA_JWT })
-
   const filePaths = await collectFiles(DIST_DIR)
-  console.log(`Uploading ${filePaths.length} files from dist/...`)
-
-  // Convert to File objects for the SDK
   const files = await Promise.all(
     filePaths.map(async (fp) => {
       const rel = relative(DIST_DIR, fp)
@@ -49,13 +45,9 @@ async function main() {
       return new File([content], rel)
     })
   )
-
   const result = await pinata.upload.public
     .fileArray(files)
-    .addMetadata({ name: PIN_NAME })
-
-  console.log(`Pinned successfully!`)
-  console.log(`CID:`)
+    .name(PIN_NAME)
   console.log(result.cid)
 }
 
