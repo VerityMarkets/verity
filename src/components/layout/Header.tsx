@@ -84,7 +84,8 @@ export function Header() {
             ))}
           </nav>
 
-          {/* Search */}
+          {/* Search (desktop) / spacer (mobile) */}
+          <div className="flex-1 md:hidden" />
           <SearchDropdown className="flex-1 hidden md:block" />
 
           {/* Why Verity — info link (Polymarket-style) */}
@@ -93,6 +94,17 @@ export function Header() {
             className="hidden md:flex items-center gap-1.5 mr-4 text-sm text-blue-400 hover:text-blue-300 transition-colors shrink-0"
           >
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            Why Verity?
+          </Link>
+
+          {/* Why Verity — mobile only (moves into right group) */}
+          <Link
+            to="/about"
+            className="md:hidden flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 transition-colors shrink-0"
+          >
+            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
             </svg>
             Why Verity?
@@ -199,16 +211,6 @@ export function Header() {
               </button>
             </span>
           ))}
-          <span className="w-px h-4 bg-white/10 mx-1 shrink-0" />
-          <Link
-            to="/about"
-            className="flex items-center gap-1 px-3 py-1 text-sm font-medium whitespace-nowrap text-blue-400 hover:text-blue-300 transition-colors shrink-0"
-          >
-            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-            </svg>
-            Why Verity?
-          </Link>
         </div>
       </header>
 
