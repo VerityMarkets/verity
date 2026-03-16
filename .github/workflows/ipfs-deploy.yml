@@ -2,7 +2,7 @@ name: Build & Deploy to IPFS
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 jobs:
@@ -10,12 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -28,12 +28,12 @@ jobs:
 
       - name: Pin to IPFS via Pinata
         id: pinata
-        uses: anantaramdas/ipfs-pinata@v1.1.2
-        with:
-          pinata-api-key: ${{ secrets.PINATA_API_KEY }}
-          pinata-secret-api-key: ${{ secrets.PINATA_SECRET_API_KEY }}
-          path-to-pin: ./dist
-          pin-name: verity-${{ github.sha }}
+        env:
+          PINATA_JWT: ${{ secrets.PINATA_JWT }}
+          PIN_NAME: verity-${{ github.sha }}
+        run: |
+          CID=$(node scripts/pinata-upload.mjs)
+          echo "hash=${CID}" >> $GITHUB_OUTPUT
 
       - name: Print deployment URLs
         run: |

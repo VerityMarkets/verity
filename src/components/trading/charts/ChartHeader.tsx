@@ -13,7 +13,7 @@ function formatSF(value: number, minSF = 3): string {
   return value.toFixed(decimals)
 }
 
-export function ChartHeader({ underlying, targetPrice, currentPrice, settlementPrice }: ChartHeaderProps) {
+export function ChartHeader({ targetPrice, currentPrice, settlementPrice }: ChartHeaderProps) {
   const priceToShow = settlementPrice ?? currentPrice
   const delta = priceToShow - targetPrice
   const isAbove = delta >= 0

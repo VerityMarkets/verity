@@ -42,7 +42,6 @@ export function TradeHistory({ search = '' }: { search?: string }) {
   const loadingMore = usePortfolioStore((s) => s.loadingMore)
   const hasMoreFills = usePortfolioStore((s) => s.hasMoreFills)
   const markets = useMarketStore((s) => s.markets)
-  const settledOutcomes = useMarketStore((s) => s.settledOutcomes)
   const getSettledMarket = useMarketStore((s) => s.getSettledMarket)
   const fetchSettledMarket = useMarketStore((s) => s.fetchSettledMarket)
   const quoteCoin = useMarketStore((s) => s.outcomeQuoteCoin) || 'USDC'

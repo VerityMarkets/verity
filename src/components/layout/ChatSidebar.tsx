@@ -30,7 +30,7 @@ export function ChatSidebar() {
     if (isConnected && address && !nostrPubkey) {
       deriveNostrKeypair(async (msg) => {
         return signMessageAsync({ message: msg })
-      }).then(({ privkey, pubkey }) => {
+      }, address).then(({ privkey, pubkey }) => {
         setIdentity(pubkey, privkey, address)
       }).catch(() => {
         // User rejected signing, that's ok

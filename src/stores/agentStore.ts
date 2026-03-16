@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import type { Hex } from 'viem'
-import { signApproveAgent, signApproveBuilderFee, signL1Action } from '@/lib/hyperliquid/signing'
+import { signApproveAgent, signApproveBuilderFee } from '@/lib/hyperliquid/signing'
 import { postExchange, fetchMaxBuilderFee, fetchExtraAgents } from '@/lib/hyperliquid/api'
 import { BUILDER_ADDRESS, BUILDER_FEE, IS_TESTNET } from '@/config'
 
@@ -15,7 +15,7 @@ function storageKey(address: string): string {
 }
 
 const HAS_REAL_BUILDER =
-  BUILDER_ADDRESS !== '0x0000000000000000000000000000000000000000'
+  (BUILDER_ADDRESS as string) !== '0x0000000000000000000000000000000000000000'
 
 interface StoredAgent {
   privateKey: Hex

@@ -135,8 +135,6 @@ function drawTargetTagWithChevrons(
   const labelW = ctx.measureText(label).width
   const chevronW = 14 // space for stacked chevrons
   const totalW = labelW + chevronW + 10
-  const sign = direction === 'up' ? -1 : 1
-
   // Tag background (arrow-pointer shape)
   ctx.fillStyle = bgColor
   ctx.beginPath()

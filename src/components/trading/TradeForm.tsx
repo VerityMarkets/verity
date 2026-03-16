@@ -137,7 +137,7 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
   const positionShares = posBalance ? parseFloat(posBalance.total) : 0
 
   const hasRealBuilder =
-    BUILDER_ADDRESS !== '0x0000000000000000000000000000000000000000'
+    (BUILDER_ADDRESS as string) !== '0x0000000000000000000000000000000000000000'
   const tradingEnabled = !!agentKey
   const needsBuilderFeeApproval = tradingEnabled && hasRealBuilder && !builderFeeApproved
 

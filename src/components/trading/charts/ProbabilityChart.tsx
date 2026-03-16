@@ -3,7 +3,7 @@ import { createChart, AreaSeries } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts'
 import { fetchCandles } from '@/lib/hyperliquid/api'
 import { useMarketStore } from '@/stores/marketStore'
-import { getBaseChartOptions, toLocalChartTime, LOCAL_TZ_OFFSET_SEC } from './chartUtils'
+import { getBaseChartOptions, toLocalChartTime } from './chartUtils'
 
 export function ProbabilityChart({ coin }: { coin: string }) {
   const containerRef = useRef<HTMLDivElement>(null)

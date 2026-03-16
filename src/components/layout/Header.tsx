@@ -113,7 +113,7 @@ export function Header() {
           {/* Right side */}
           <div className="flex items-center gap-2 shrink-0">
             <ConnectButton.Custom>
-              {({ account, chain, openAccountModal, openConnectModal, mounted }) => {
+              {({ account, chain, openConnectModal, mounted }) => {
                 const connected = mounted && account && chain
                 return (
                   <div

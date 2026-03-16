@@ -1,5 +1,4 @@
 import { useMarketStore } from '@/stores/marketStore'
-import { useOrderBookStore } from '@/stores/orderbookStore'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import { MarketTimer } from '../markets/MarketTimer'
 import { formatExpiryWithTimezone, formatShares } from '@/lib/marketFormat'
@@ -13,7 +12,6 @@ interface MarketHeaderProps {
 
 export function MarketHeader({ market, settled, settlementResult }: MarketHeaderProps) {
   const mids = useMarketStore((s) => s.mids)
-  const books = useOrderBookStore((s) => s.books)
   const balances = usePortfolioStore((s) => s.balances)
 
   // Use mid from order book (midpoint of best bid/ask), fallback to allMids
