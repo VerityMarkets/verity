@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useMainnetMid } from '@/hooks/useMainnetMid'
 import { useMarketStore } from '@/stores/marketStore'
+import { usePortfolioStore } from '@/stores/portfolioStore'
 import { ProbabilityChart } from './charts/ProbabilityChart'
 import { UnderlyingTickerChart } from './charts/UnderlyingTickerChart'
 import { UnderlyingCandleChart } from './charts/UnderlyingCandleChart'
@@ -23,6 +24,13 @@ export function ChartContainer({ market, settled, settlementPrice, settlementRes
   const mid = useMainnetMid(market.underlying)
   const tradeSide = useMarketStore((s) => s.tradeSide)
   const mids = useMarketStore((s) => s.mids)
+  const allFills = usePortfolioStore((s) => s.fills)
+
+  // Filter fills to this market's coins
+  const marketFills = useMemo(() => {
+    if (!allFills || allFills.length === 0) return []
+    return allFills.filter((f) => f.coin === market.yesCoin || f.coin === market.noCoin)
+  }, [allFills, market.yesCoin, market.noCoin])
 
   const isBinary = market.class === 'priceBinary'
   const periodMinutes = parsePeriodMinutes(market.period)
@@ -93,6 +101,9 @@ export function ChartContainer({ market, settled, settlementPrice, settlementRes
         <UnderlyingTickerChart
           underlying={market.underlying}
           targetPrice={market.targetPrice}
+          yesCoin={market.yesCoin}
+          noCoin={market.noCoin}
+          fills={marketFills}
         />
       )}
       {effectiveType === 'candles' && (

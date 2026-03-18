@@ -44,14 +44,14 @@ jobs:
           echo ""
           echo "  CID: ${CID}"
           echo ""
-          echo "  IPFS Gateway:"
+          echo "  Pinata Gateway:"
+          echo "  https://gateway.pinata.cloud/ipfs/${CID}"
+          echo ""
+          echo "  IPFS.io:"
           echo "  https://ipfs.io/ipfs/${CID}"
           echo ""
-          echo "  Cloudflare IPFS:"
-          echo "  https://cloudflare-ipfs.com/ipfs/${CID}"
-          echo ""
-          echo "  dweb.link:"
-          echo "  https://${CID}.ipfs.dweb.link"
+          echo "  4EVERLAND:"
+          echo "  https://4everland.io/ipfs/${CID}"
           echo ""
           echo "============================================"
 
@@ -71,6 +71,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Gateway | URL |" >> $GITHUB_STEP_SUMMARY
           echo "|---------|-----|" >> $GITHUB_STEP_SUMMARY
-          echo "| IPFS | https://ipfs.io/ipfs/${CID} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Cloudflare | https://cloudflare-ipfs.com/ipfs/${CID} |" >> $GITHUB_STEP_SUMMARY
-          echo "| dweb.link | https://${CID}.ipfs.dweb.link |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pinata | https://gateway.pinata.cloud/ipfs/${CID} |" >> $GITHUB_STEP_SUMMARY
+          echo "| IPFS.io | https://ipfs.io/ipfs/${CID} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 4EVERLAND | https://4everland.io/ipfs/${CID} |" >> $GITHUB_STEP_SUMMARY

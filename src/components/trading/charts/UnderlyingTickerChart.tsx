@@ -1,12 +1,30 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useMainnetMidRef, fetchMainnetCandles } from '@/hooks/useMainnetMid'
+import type { Fill } from '@/lib/hyperliquid/types'
 
 interface UnderlyingTickerChartProps {
   underlying: string
   targetPrice: number
+  yesCoin?: string
+  noCoin?: string
+  fills?: Fill[]
 }
 
 type PricePoint = { ts: number; value: number }
+
+type TradeMarker = {
+  time: number          // cluster midpoint timestamp
+  totalShares: number   // aggregated share count
+  isPositive: boolean   // green (buy yes / sell no) or red (buy no / sell yes)
+}
+
+type FloatingTag = {
+  time: number          // x-anchor timestamp
+  shares: number        // label text
+  isPositive: boolean
+  startedAt: number     // animation start (Date.now())
+  baseY: number         // starting Y pixel position (set during draw)
+}
 
 const WINDOW_MS = 60_000 // 60 seconds visible
 const SAMPLE_MS = 500 // add a data point every 500ms
@@ -15,6 +33,9 @@ const EDGE_PAD = 14 // breathing space (px) between ball and right axis
 const PING_PERIOD = 2000 // ping every 2s
 const PING_DURATION = 1000 // ping animation lasts 1s
 const ARROW_PULSE_PERIOD = 1500 // pulsating arrow cycle
+const AGGREGATION_MS = 3000 // cluster fills within 3s
+const FLOAT_DURATION = 800 // floating tag animation duration
+const FLOAT_DISTANCE = 30 // floating tag travel distance (px)
 
 /** Ease-out cubic: starts fast, decelerates to stop */
 function easeOut(t: number): number {
@@ -182,6 +203,137 @@ function drawTargetTagWithChevrons(
   ctx.restore()
 }
 
+/** Binary search data for the price at a given timestamp, linear-interpolate between neighbours */
+function interpolatePrice(data: ReadonlyArray<PricePoint>, time: number): number | null {
+  if (data.length === 0) return null
+  if (time <= data[0].ts) return data[0].value
+  if (time >= data[data.length - 1].ts) return data[data.length - 1].value
+
+  // Binary search for the right bracket
+  let lo = 0, hi = data.length - 1
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1
+    if (data[mid].ts <= time) lo = mid
+    else hi = mid
+  }
+  const a = data[lo], b = data[hi]
+  if (b.ts === a.ts) return a.value
+  const t = (time - a.ts) / (b.ts - a.ts)
+  return a.value + (b.value - a.value) * t
+}
+
+/** Draw a small rounded pill / bubble tag */
+function drawBubbleTag(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  text: string,
+  bgColor: string,
+  alpha: number,
+) {
+  ctx.save()
+  ctx.globalAlpha = alpha
+  const metrics = ctx.measureText(text)
+  const pw = metrics.width + 10
+  const ph = 16
+  const rx = x - pw / 2
+  const ry = y - ph / 2
+  const r = 4
+
+  // Rounded rect background
+  ctx.beginPath()
+  ctx.moveTo(rx + r, ry)
+  ctx.lineTo(rx + pw - r, ry)
+  ctx.quadraticCurveTo(rx + pw, ry, rx + pw, ry + r)
+  ctx.lineTo(rx + pw, ry + ph - r)
+  ctx.quadraticCurveTo(rx + pw, ry + ph, rx + pw - r, ry + ph)
+  ctx.lineTo(rx + r, ry + ph)
+  ctx.quadraticCurveTo(rx, ry + ph, rx, ry + ph - r)
+  ctx.lineTo(rx, ry + r)
+  ctx.quadraticCurveTo(rx, ry, rx + r, ry)
+  ctx.closePath()
+  ctx.fillStyle = bgColor
+  ctx.fill()
+
+  // Text
+  ctx.fillStyle = '#fff'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, x, y)
+  ctx.restore()
+}
+
+/** Draw trade execution markers (dots + bubble tags) on the chart */
+function drawTradeMarkers(
+  ctx: CanvasRenderingContext2D,
+  markers: ReadonlyArray<TradeMarker>,
+  floatingTags: FloatingTag[],
+  data: ReadonlyArray<PricePoint>,
+  getXPos: (ts: number) => number,
+  getYPos: (value: number) => number,
+  now: number,
+) {
+  if (markers.length === 0 && floatingTags.length === 0) return
+
+  const FONT = '10px ui-monospace, SFMono-Regular, Menlo, Monaco, monospace'
+  ctx.save()
+  ctx.font = FONT
+
+  const GREEN = '#22c55e'
+  const RED = '#ef4444'
+
+  // Draw pinned markers
+  for (const marker of markers) {
+    const price = interpolatePrice(data, marker.time)
+    if (price === null) continue
+
+    const mx = getXPos(marker.time)
+    const my = getYPos(price)
+    const color = marker.isPositive ? GREEN : RED
+    const sharesText = Math.round(marker.totalShares).toString()
+
+    // Dot on curve
+    ctx.beginPath()
+    ctx.arc(mx, my, 5, 0, Math.PI * 2)
+    ctx.fillStyle = color
+    ctx.fill()
+
+    // White ring
+    ctx.beginPath()
+    ctx.arc(mx, my, 5, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+
+    // Pinned bubble tag
+    const tagOffset = marker.isPositive ? -18 : 18
+    drawBubbleTag(ctx, mx, my + tagOffset, sharesText, color, 0.9)
+  }
+
+  // Draw floating (fading) tags
+  for (const tag of floatingTags) {
+    const elapsed = now - tag.startedAt
+    if (elapsed >= FLOAT_DURATION) continue
+
+    const t = elapsed / FLOAT_DURATION
+    const alpha = 1 - t
+
+    const price = interpolatePrice(data, tag.time)
+    if (price === null) continue
+
+    const tx = getXPos(tag.time)
+    const baseY = getYPos(price)
+    const baseOffset = tag.isPositive ? -18 : 18
+    const floatDir = tag.isPositive ? -1 : 1
+    const yOffset = baseOffset + floatDir * FLOAT_DISTANCE * easeOut(t)
+    const color = tag.isPositive ? GREEN : RED
+
+    drawBubbleTag(ctx, tx, baseY + yOffset, Math.round(tag.shares).toString(), color, alpha * 0.9)
+  }
+
+  ctx.restore()
+}
+
 // ─── Main draw function ────────────────────────────────────────────────────────
 
 function drawChart(
@@ -192,6 +344,8 @@ function drawChart(
   height: number,
   now: number,
   displayValue: number, // animated endpoint value (eased between ticks)
+  markers: ReadonlyArray<TradeMarker>,
+  floatingTags: FloatingTag[],
 ) {
   const FONT = '11px ui-monospace, SFMono-Regular, Menlo, Monaco, monospace'
   ctx.font = FONT
@@ -440,6 +594,9 @@ function drawChart(
   ctx.fill()
   ctx.restore()
 
+  // ─── Trade execution markers ──────────────────────────────────────
+  drawTradeMarkers(ctx, markers, floatingTags, data, getXPos, getYPos, now)
+
   // ─── Ping animation ────────────────────────────────────────────────
   const pingPhase = (now % PING_PERIOD) / PING_PERIOD
   const pingActive = pingPhase < PING_DURATION / PING_PERIOD
@@ -486,7 +643,7 @@ function drawChart(
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
-export function UnderlyingTickerChart({ underlying, targetPrice }: UnderlyingTickerChartProps) {
+export function UnderlyingTickerChart({ underlying, targetPrice, yesCoin, noCoin, fills }: UnderlyingTickerChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const dataRef = useRef<PricePoint[]>([])
@@ -497,6 +654,70 @@ export function UnderlyingTickerChart({ underlying, targetPrice }: UnderlyingTic
   const animRef = useRef<{ fromValue: number; toValue: number; startTs: number }>({
     fromValue: 0, toValue: 0, startTs: 0,
   })
+
+  // Trade marker state
+  const markersRef = useRef<TradeMarker[]>([])
+  const prevMarkersRef = useRef<TradeMarker[]>([])
+  const floatingTagsRef = useRef<FloatingTag[]>([])
+
+  // Aggregate fills into trade markers, spawn floating tags on changes
+  useEffect(() => {
+    if (!fills || !yesCoin || !noCoin) {
+      markersRef.current = []
+      return
+    }
+
+    const now = Date.now()
+    const windowStart = now - WINDOW_MS * 2 // keep markers a bit beyond visible window
+
+    // Classify and filter fills
+    type ClassifiedFill = { time: number; shares: number; isPositive: boolean }
+    const classified: ClassifiedFill[] = []
+    for (const f of fills) {
+      if (f.time < windowStart) continue
+      if (f.coin !== yesCoin && f.coin !== noCoin) continue
+      const isPositive =
+        (f.side === 'B' && f.coin === yesCoin) ||
+        (f.side === 'A' && f.coin === noCoin)
+      classified.push({ time: f.time, shares: parseFloat(f.sz), isPositive })
+    }
+
+    // Sort ascending by time
+    classified.sort((a, b) => a.time - b.time)
+
+    // Greedy clustering: new cluster on gap > AGGREGATION_MS or sign change
+    const markers: TradeMarker[] = []
+    for (const fill of classified) {
+      const last = markers[markers.length - 1]
+      if (last && fill.isPositive === last.isPositive && fill.time - last.time <= AGGREGATION_MS) {
+        last.totalShares += fill.shares
+        last.time = (last.time + fill.time) / 2 // shift toward midpoint
+      } else {
+        markers.push({ time: fill.time, totalShares: fill.shares, isPositive: fill.isPositive })
+      }
+    }
+
+    // Diff against previous markers to spawn floating tags
+    const prev = prevMarkersRef.current
+    for (const m of markers) {
+      const match = prev.find(
+        (p) => p.isPositive === m.isPositive && Math.abs(p.time - m.time) < AGGREGATION_MS,
+      )
+      if (match && match.totalShares !== m.totalShares) {
+        // Shares changed — old value becomes a floating tag
+        floatingTagsRef.current.push({
+          time: m.time,
+          shares: match.totalShares,
+          isPositive: m.isPositive,
+          startedAt: now,
+          baseY: 0, // will be set during draw
+        })
+      }
+    }
+
+    prevMarkersRef.current = markers.map((m) => ({ ...m }))
+    markersRef.current = markers
+  }, [fills, yesCoin, noCoin])
 
   // Draw function — computes interpolated display value each frame
   const drawFrame = useCallback(() => {
@@ -522,8 +743,13 @@ export function UnderlyingTickerChart({ underlying, targetPrice }: UnderlyingTic
     const dpr = window.devicePixelRatio || 1
     ctx.save()
     ctx.scale(dpr, dpr)
-    drawChart(ctx, dataRef.current, targetPrice, w, h, now, displayValue)
+    drawChart(ctx, dataRef.current, targetPrice, w, h, now, displayValue, markersRef.current, floatingTagsRef.current)
     ctx.restore()
+
+    // Prune expired floating tags
+    floatingTagsRef.current = floatingTagsRef.current.filter(
+      (t) => now - t.startedAt < FLOAT_DURATION,
+    )
   }, [targetPrice])
 
   // Render timer — redraws at ~30fps using setInterval (rAF unreliable in some contexts)

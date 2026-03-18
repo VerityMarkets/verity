@@ -8,6 +8,7 @@ import { TradeForm } from '@/components/trading/TradeForm'
 import { OrderBook } from '@/components/trading/OrderBook'
 import { ChartContainer } from '@/components/trading/ChartContainer'
 import { RecentTrades } from '@/components/trading/RecentTrades'
+import { MarketOrders } from '@/components/trading/MarketOrders'
 import { Trollbox } from '@/components/chat/Trollbox'
 import { toToken } from '@/lib/hyperliquid/encoding'
 import { getChatGroup } from '@/lib/chatGroup'
@@ -261,6 +262,7 @@ export function MarketPage() {
         {!isExpired && (
           <div className="space-y-4">
             <TradeForm market={market} />
+            <MarketOrders market={market} />
             {bookOpen && (
               <Trollbox
                 market={trollboxMarket}
