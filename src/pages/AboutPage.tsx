@@ -1,22 +1,5 @@
 import { Link } from 'react-router-dom'
 
-/* ---------- placeholder images ---------- */
-// Replace with real images / illustrations later.
-// Prompt suggestions for each section are in comments below.
-
-function PlaceholderImg({ prompt, className = '' }: { prompt: string; className?: string }) {
-  return (
-    <div
-      className={`rounded-xl bg-surface-2 border border-white/5 flex items-center justify-center text-center p-6 ${className}`}
-      title={prompt}
-    >
-      <span className="text-xs text-gray-500 leading-relaxed max-w-[200px]">
-        {prompt}
-      </span>
-    </div>
-  )
-}
-
 /* ---------- data ---------- */
 const usps = [
   {
@@ -27,7 +10,7 @@ const usps = [
     ),
     title: 'Every HIP-4 Market, One Interface',
     body: 'A purpose-built trading UX for prediction markets — not a generic DEX interface. Verity supports all Hyperliquid HIP-4 outcome markets: binary predictions, multi-outcome events, and options when they launch. Browse by category, trade with simple Yes/No buttons, see live odds, and track positions at a glance.',
-    imgPrompt: 'Screenshot of Verity market page showing Yes/No trading buttons, price chart, category bar, and order book',
+    img: '/about/markets.png',
   },
   {
     icon: (
@@ -38,7 +21,7 @@ const usps = [
     title: 'Open Source & Verifiable',
     body: "Every line of code is public. Inspect the smart contract interactions, verify there are no hidden fees or back-doors. Don't trust — verify.",
     link: { label: 'View on GitHub →', href: 'https://github.com/AXE-LABS-LLC/verity', external: true },
-    imgPrompt: 'Illustration: code editor with Verity source code, GitHub logo, and a checkmark badge',
+    img: '/about/opensource.png',
   },
   {
     icon: (
@@ -48,7 +31,7 @@ const usps = [
     ),
     title: 'Direct API, No Hidden Backend',
     body: 'Verity talks directly to Hyperliquid\'s public APIs. There is no middleman server processing your orders, holding your funds, or logging your trades. Your wallet signs every transaction.',
-    imgPrompt: 'Diagram: Wallet → direct arrows → Hyperliquid API. No server in the middle. Clean dark theme.',
+    img: null, // No graphic for this section yet
   },
   {
     icon: (
@@ -58,7 +41,7 @@ const usps = [
     ),
     title: 'Zero Tracking, Zero Analytics',
     body: 'No cookies, no analytics scripts, no data collection. We don\'t know who you are and we don\'t want to. Your trading activity stays between you and the blockchain.',
-    imgPrompt: 'Illustration: crossed-out tracking cookie, no eye icon, privacy shield in amber/gold',
+    img: '/about/privacy.png',
   },
   {
     icon: (
@@ -69,7 +52,7 @@ const usps = [
     title: 'Censorship Resistant',
     body: 'Deployed on IPFS — no single server to shut down. Chat runs on Nostr — no central platform to ban you from. Verity is designed to keep working even when others try to stop it.',
     badges: ['IPFS', 'Nostr'],
-    imgPrompt: 'Illustration: globe with distributed nodes, IPFS logo, Nostr logo, shield icon',
+    img: '/about/censorship.png',
   },
   {
     icon: (
@@ -79,7 +62,7 @@ const usps = [
     ),
     title: 'Ultra-Low Fees',
     body: null, // custom content below
-    imgPrompt: 'Comparison chart: Verity 0.1% vs Competitors 1-2%, bar chart, amber vs gray bars',
+    img: '/about/fees.png',
   },
 ]
 
@@ -192,10 +175,17 @@ export function AboutPage() {
               </div>
             )}
 
-            {/* Placeholder image */}
-            <div className="pl-14">
-              <PlaceholderImg prompt={usp.imgPrompt} className="h-40 w-full" />
-            </div>
+            {/* Section image */}
+            {usp.img && (
+              <div className="pl-14">
+                <img
+                  src={usp.img}
+                  alt={usp.title}
+                  className="rounded-xl w-full"
+                  loading="lazy"
+                />
+              </div>
+            )}
           </section>
         ))}
       </div>

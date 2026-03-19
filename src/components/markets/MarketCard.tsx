@@ -71,9 +71,9 @@ export function MarketCard({ market }: { market: ParsedMarket }) {
             {market.sideNames[1]} {100 - yesPct}¢
           </span>
         </div>
-        <div className="h-1.5 rounded-full bg-surface-3 overflow-hidden">
+        <div className="h-1.5 rounded-full bg-no/60 overflow-hidden">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-yes to-yes/70 transition-all duration-500"
+            className="h-full rounded-full bg-yes transition-all duration-500"
             style={{ width: `${yesPct}%` }}
           />
         </div>

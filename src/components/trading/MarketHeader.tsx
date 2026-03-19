@@ -37,14 +37,7 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
 
   const isRecurring = market.class === 'priceBinary'
 
-  // Color-code progress bar by probability
-  const barColor = yesPct >= 70
-    ? 'from-yes to-yes/60'           // green — high probability
-    : yesPct >= 50
-      ? 'from-amber-400 to-amber-400/60' // amber — moderate
-      : yesPct >= 30
-        ? 'from-orange-500 to-orange-500/60' // orange — low-moderate
-        : 'from-no to-no/60'               // red — low probability
+  // Green/red split bar
 
   return (
     <div className="card p-4">
@@ -149,9 +142,9 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
       {/* Progress bar + timer */}
       <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
         <div className="flex-1 mr-4">
-          <div className="h-2 rounded-full bg-surface-3 overflow-hidden">
+          <div className="h-2 rounded-full bg-no/60 overflow-hidden">
             <div
-              className={`h-full rounded-full bg-gradient-to-r ${barColor} transition-all duration-500`}
+              className="h-full rounded-full bg-yes transition-all duration-500"
               style={{ width: `${yesPct}%` }}
             />
           </div>
