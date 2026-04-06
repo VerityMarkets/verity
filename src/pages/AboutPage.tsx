@@ -62,7 +62,7 @@ const usps = [
     ),
     title: 'Ultra-Low Fees',
     body: null, // custom content below
-    img: '/about/fees.png',
+    img: null, // rendered inside FeeSection
   },
 ]
 
@@ -213,19 +213,12 @@ function FeeSection() {
         We&rsquo;re committed to keeping ours as low as possible.
       </p>
 
-      {/* Fee comparison */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-lg bg-surface-2 border border-white/5 p-4 text-center">
-          <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">Others</div>
-          <div className="text-2xl font-bold text-gray-400">1%</div>
-          <div className="text-[11px] text-gray-500 mt-1">Max Amount</div>
-        </div>
-        <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 p-4 text-center">
-          <div className="text-[11px] text-amber-400/70 uppercase tracking-wider mb-1">Verity</div>
-          <div className="text-2xl font-bold text-amber-400">0.1%</div>
-          <div className="text-[11px] text-gray-500 mt-1">On selling shares only!</div>
-        </div>
-      </div>
+      <img
+        src="/about/fees.png"
+        alt="Fee comparison"
+        className="rounded-xl w-full"
+        loading="lazy"
+      />
 
       <p className="text-gray-400 leading-relaxed">
         Think of it as a <span className="text-amber-400/80 font-medium">$1 donation for every $1,000</span> you take profit on — funding a small, open-source team building tools you can actually verify.
@@ -241,7 +234,7 @@ function FeeSection() {
         <div>
           <p className="text-sm text-gray-300 font-medium">Beta period: 0.001% fee</p>
           <p className="text-xs text-gray-500 mt-0.5">
-            During beta, the builder fee will be just 0.001% (1 cent per $1,000 traded) — mainly to track usage.
+            During beta, the builder fee will be just 0.001% (1 cent per $1,000 traded) — this is for us to understand usage.
           </p>
         </div>
       </div>

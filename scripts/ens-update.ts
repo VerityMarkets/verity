@@ -86,6 +86,7 @@ async function main() {
   console.log(`  Node:        ${node}`)
   console.log(`  CID:         ${cid}`)
   console.log(`  Contenthash: ${encoded}`)
+  console.log(`  Submitting TX...`)
 
   const txHash = await walletClient.writeContract({
     address: RESOLVER,
@@ -95,9 +96,13 @@ async function main() {
   })
 
   console.log(`  TX submitted: ${txHash}`)
-  console.log(`  Waiting for confirmation...`)
+  console.log(`  https://etherscan.io/tx/${txHash}`)
+  console.log(`  Waiting for confirmation (120s timeout)...`)
 
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash })
+  const receipt = await publicClient.waitForTransactionReceipt({
+    hash: txHash,
+    timeout: 120_000,
+  })
   console.log(`  Confirmed in block ${receipt.blockNumber}`)
   console.log(``)
   console.log(`Done! ${domain} now points to ipfs://${cid}`)
