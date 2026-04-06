@@ -22,7 +22,7 @@ import {
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { mainnet } from 'viem/chains'
-import contentHash from 'content-hash'
+import { encode } from '@ensdomains/content-hash'
 
 // ENS PublicResolver ABI (only setContenthash)
 const resolverAbi = [
@@ -61,7 +61,7 @@ async function main() {
   }
 
   // Encode CID to ENS contenthash bytes (handles CIDv0 and CIDv1)
-  const encoded = '0x' + contentHash.fromIpfs(cid) as `0x${string}`
+  const encoded = ('0x' + encode('ipfs', cid)) as `0x${string}`
 
   const transport = http(rpcUrl)
   const account = privateKeyToAccount(privateKey)
