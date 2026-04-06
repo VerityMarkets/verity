@@ -24,7 +24,19 @@ import { privateKeyToAccount } from 'viem/accounts'
 import { mainnet } from 'viem/chains'
 import { encode } from '@ensdomains/content-hash'
 
-// ENS PublicResolver ABI (only setContenthash)
+// ENS Registry (immutable address on mainnet)
+const ENS_REGISTRY = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as const
+
+const registryAbi = [
+  {
+    name: 'resolver',
+    type: 'function',
+    inputs: [{ name: 'node', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+  },
+] as const
+
 const resolverAbi = [
   {
     name: 'setContenthash',
@@ -79,17 +91,28 @@ async function main() {
 
   const node = namehash(domain)
 
-  // ENS PublicResolver address (mainnet)
-  const RESOLVER = '0x231b0Ee14048e9dCcD1d247744d114a4EB5E8E63' as const
+  // Dynamically look up the resolver set for this ENS name
+  const resolver = await publicClient.readContract({
+    address: ENS_REGISTRY,
+    abi: registryAbi,
+    functionName: 'resolver',
+    args: [node],
+  }) as `0x${string}`
+
+  if (!resolver || resolver === '0x0000000000000000000000000000000000000000') {
+    console.error(`No resolver set for ${domain}`)
+    process.exit(1)
+  }
 
   console.log(`Updating ENS contenthash for ${domain}`)
   console.log(`  Node:        ${node}`)
+  console.log(`  Resolver:    ${resolver}`)
   console.log(`  CID:         ${cid}`)
   console.log(`  Contenthash: ${encoded}`)
   console.log(`  Submitting TX...`)
 
   const txHash = await walletClient.writeContract({
-    address: RESOLVER,
+    address: resolver,
     abi: resolverAbi,
     functionName: 'setContenthash',
     args: [node, encoded],
