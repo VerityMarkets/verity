@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "verity-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "/Users/ravenxce/.nvm/versions/node/v23.6.0/bin/node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5173"],
       "port": 5173
     }
   ]

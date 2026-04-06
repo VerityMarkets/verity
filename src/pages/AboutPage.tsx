@@ -31,7 +31,7 @@ const usps = [
     ),
     title: 'Direct API, No Hidden Backend',
     body: 'Verity talks directly to Hyperliquid\'s public APIs. There is no middleman server processing your orders, holding your funds, or logging your trades. Your wallet signs every transaction.',
-    img: null, // No graphic for this section yet
+    img: '/about/directapi.png',
   },
   {
     icon: (

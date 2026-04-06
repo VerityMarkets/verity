@@ -53,6 +53,9 @@ jobs:
           echo "  4EVERLAND:"
           echo "  https://4everland.io/ipfs/${CID}"
           echo ""
+          echo "  ENS:"
+          echo "  https://verity.eth.limo"
+          echo ""
           echo "============================================"
 
       - name: Update ENS contenthash
@@ -74,3 +77,4 @@ jobs:
           echo "| Pinata | https://gateway.pinata.cloud/ipfs/${CID} |" >> $GITHUB_STEP_SUMMARY
           echo "| IPFS.io | https://ipfs.io/ipfs/${CID} |" >> $GITHUB_STEP_SUMMARY
           echo "| 4EVERLAND | https://4everland.io/ipfs/${CID} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ENS | https://verity.eth.limo |" >> $GITHUB_STEP_SUMMARY
