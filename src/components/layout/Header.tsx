@@ -112,6 +112,17 @@ export function Header() {
 
           {/* Right side */}
           <div className="flex items-center gap-2 shrink-0">
+            <a
+              href="https://x.com/VerityMkts"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1.5 text-gray-500 hover:text-gray-300 transition-colors"
+              aria-label="Follow on X"
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+              </svg>
+            </a>
             <ConnectButton.Custom>
               {({ account, chain, openConnectModal, mounted }) => {
                 const connected = mounted && account && chain
