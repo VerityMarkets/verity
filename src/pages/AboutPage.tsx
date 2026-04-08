@@ -20,7 +20,7 @@ const usps = [
     ),
     title: 'Open Source & Verifiable',
     body: "Every line of code is public. Inspect the smart contract interactions, verify there are no hidden fees or back-doors. Don't trust — verify.",
-    link: { label: 'View on GitHub →', href: 'https://github.com/AXE-LABS-LLC/verity', external: true },
+    link: { label: 'View on GitHub →', href: 'https://github.com/VerityMarkets/verity', external: true },
     img: '/about/opensource.png',
   },
   {
