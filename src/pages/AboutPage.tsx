@@ -175,11 +175,12 @@ export function AboutPage() {
               </div>
             )}
 
-            {/* Section image */}
+            {/* Section image — 2x srcSet for Retina */}
             {usp.img && (
               <div className="pl-14">
                 <img
                   src={usp.img}
+                  srcSet={`${usp.img.replace('.png', '@2x.png')} 2x`}
                   alt={usp.title}
                   className="rounded-xl w-full"
                   loading="lazy"
@@ -228,6 +229,7 @@ function FeeSection() {
 
       <img
         src="/about/fees.png"
+        srcSet="/about/fees@2x.png 2x"
         alt="Fee comparison"
         className="rounded-xl w-full"
         loading="lazy"
