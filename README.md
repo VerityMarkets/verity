@@ -2,6 +2,8 @@
 
 Decentralized prediction market interface for Hyperliquid HIP-4 outcome markets.
 
+Testnet live at https://verity.eth.limo
+
 ## Features
 
 - **Binary outcome trading** — Buy/sell Yes/No shares on BTC and HYPE price predictions
