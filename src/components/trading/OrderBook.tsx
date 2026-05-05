@@ -1,8 +1,11 @@
-import { useOrderBookStore } from '@/stores/orderbookStore'
+import { useEffect, useMemo } from 'react'
+import { useOrderBookStore, RAW_SF } from '@/stores/orderbookStore'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import {
   useOrderBookUiStore,
-  resolveTick,
+  precisionToNSigFigs,
+  precisionToTick,
+  defaultPrecision,
   type Precision,
 } from '@/stores/orderbookUiStore'
 
@@ -74,14 +77,14 @@ function aggregate(
   levels: RawLevel[],
   side: 'ask' | 'bid',
   tickTbp: 1 | 10 | 100,
-  userPxSet: Set<string>,
+  userBuckets: Set<string>,
 ): AggregatedLevel[] {
   const out: AggregatedLevel[] = []
   for (const lvl of levels) {
     const display = formatCents(lvl.px, side, tickTbp)
     const sz = parseFloat(lvl.sz)
     const usd = parseFloat(lvl.px) * sz
-    const isUser = userPxSet.has(parseFloat(lvl.px).toFixed(8))
+    const isUser = userBuckets.has(display)
     const last = out[out.length - 1]
     if (last && last.display === display) {
       last.size += sz
@@ -95,51 +98,98 @@ function aggregate(
 }
 
 const PRECISION_OPTIONS: { value: Precision; label: string }[] = [
-  { value: 'auto', label: 'Auto' },
   { value: '1c', label: '1¢' },
   { value: '0.1c', label: '0.1¢' },
   { value: '0.01c', label: '0.01¢' },
 ]
 
+const FALLBACK_PRECISION: Precision = '1c'
+
 export function OrderBook({ coin }: { coin: string }) {
-  const books = useOrderBookStore((s) => s.books)
   const openOrders = usePortfolioStore((s) => s.openOrders)
-  const precision = useOrderBookUiStore((s) => s.precisionByCoin[coin] ?? 'auto')
+  const storedPrecision = useOrderBookUiStore((s) => s.precisionByCoin[coin])
   const setPrecision = useOrderBookUiStore((s) => s.setPrecision)
 
-  const book = books[coin]
+  const validStored: Precision | undefined =
+    storedPrecision === '1c' || storedPrecision === '0.1c' || storedPrecision === '0.01c'
+      ? storedPrecision
+      : undefined
+  const precision: Precision = validStored ?? FALLBACK_PRECISION
+  const nSigFigs = precisionToNSigFigs(precision)
+
+  // Pre-loaded slots at all four sig-fig precisions; we read just the two we
+  // need (chosen for display, raw for accurate spread + smart-default seed).
+  // Per-slot granular selectors mean a tick in *another* slot doesn't trigger
+  // a re-render here. Selecting raw twice (when chosen===raw) is harmless —
+  // zustand will return the same reference.
+  const displayBook = useOrderBookStore((s) => s.books[coin]?.[nSigFigs])
+  const rawBook = useOrderBookStore((s) => s.books[coin]?.[RAW_SF])
+
+  // Smart-default: pick precision once based on initial book state, then
+  // persist. Reads sf5 (raw) since it's available regardless of which
+  // precision the user ends up choosing.
+  useEffect(() => {
+    if (validStored) return
+    const ba = parseFloat(rawBook?.asks?.[0]?.px ?? '0') * 100
+    if (ba <= 0) return // wait for book
+    setPrecision(coin, defaultPrecision(ba))
+  }, [validStored, rawBook, coin, setPrecision])
+
+  // Display falls back to raw while the chosen-precision slot is still
+  // loading its first message — keeps rows visible during initial load.
+  const book = displayBook ?? rawBook
   const bids = book?.bids ?? []
   const asks = book?.asks ?? []
 
-  // Resolve "auto" precision from magnitude + spread
-  const bestAskCents = parseFloat(asks[0]?.px ?? '0') * 100
-  const bestBidCents = parseFloat(bids[0]?.px ?? '0') * 100
-  const tickTbp = resolveTick(precision, bestAskCents, bestBidCents)
+  const tickTbp = precisionToTick(precision)
 
-  // Set of price levels where user has resting orders for this coin
-  const userOrderPrices = new Set<string>()
-  for (const order of openOrders) {
-    if (order.coin === coin) {
-      userOrderPrices.add(parseFloat(order.limitPx).toFixed(8))
+  // Memoize the heavy work so identical snapshots don't re-walk the rows.
+  // Keyed on the actual data we depend on (length is a cheap heuristic +
+  // best-px shifts catch updates). We rely on book reference identity for the
+  // hot path — granular zustand selectors only mint new objects when this
+  // coin actually changes.
+  const { displayAsks, displayBids, maxAskSize, maxBidSize, spreadCents } = useMemo(() => {
+    // User-order buckets at current tick, so the ⭐ marker survives server-
+    // side aggregation (display match instead of raw-px match).
+    const userBuckets = new Set<string>()
+    for (const order of openOrders) {
+      if (order.coin === coin) {
+        const dir: 'ask' | 'bid' = order.side === 'B' ? 'bid' : 'ask'
+        userBuckets.add(formatCents(order.limitPx, dir, tickTbp))
+      }
     }
-  }
 
-  const aggregatedAsks = aggregate(asks, 'ask', tickTbp, userOrderPrices).slice(0, 8)
-  const aggregatedBids = aggregate(bids, 'bid', tickTbp, userOrderPrices).slice(0, 8)
+    const aggAsks = aggregate(asks, 'ask', tickTbp, userBuckets).slice(0, 12)
+    const aggBids = aggregate(bids, 'bid', tickTbp, userBuckets).slice(0, 12)
 
-  const maxBidSize = Math.max(...aggregatedBids.map((b) => b.size), 1)
-  const maxAskSize = Math.max(...aggregatedAsks.map((a) => a.size), 1)
+    const maxAskSz = Math.max(...aggAsks.map((a) => a.size), 1)
+    const maxBidSz = Math.max(...aggBids.map((b) => b.size), 1)
 
-  const displayAsks = [...aggregatedAsks].reverse()
-  const displayBids = aggregatedBids
+    // Spread is read from the RAW (sf5) book so it's accurate regardless of
+    // which display precision the user has selected — no rounding error.
+    const rawBa = parseFloat(rawBook?.asks?.[0]?.px ?? '0')
+    const rawBb = parseFloat(rawBook?.bids?.[0]?.px ?? '0')
 
-  // Spread (uses raw best bid/ask, not aggregated, so it's exact)
-  const bestAsk = parseFloat(asks[0]?.px ?? '0')
-  const bestBid = parseFloat(bids[0]?.px ?? '0')
-  const spreadCents = (bestAsk - bestBid) * 100
+    return {
+      displayAsks: [...aggAsks].reverse(),
+      displayBids: aggBids,
+      maxAskSize: maxAskSz,
+      maxBidSize: maxBidSz,
+      spreadCents: (rawBa - rawBb) * 100,
+    }
+    // openOrders ref is stable per portfolio refresh; bids/asks refs change
+    // only when this coin's book updates (granular selector above).
+  }, [bids, asks, rawBook, openOrders, coin, tickTbp])
 
   return (
-    <div className="space-y-0.5">
+    // `overflow-anchor: none` opts the OrderBook out of being the browser's
+    //   scroll anchor element — when row count changes (precision change,
+    //   thin book, etc.), the browser anchors on stable content above
+    //   (chart / market header) instead of trying to anchor on a row that
+    //   may no longer exist, which prevents the page from snapping up.
+    // `contain: layout` keeps OrderBook's internal layout reflows from
+    //   rippling to siblings.
+    <div className="space-y-0.5 [overflow-anchor:none] [contain:layout]">
         {/* Header w/ precision selector */}
         <div className="grid grid-cols-3 text-[10px] text-gray-500 uppercase font-mono pb-1 items-center">
           <div className="flex items-center gap-1">
@@ -147,7 +197,7 @@ export function OrderBook({ coin }: { coin: string }) {
             <select
               value={precision}
               onChange={(e) => setPrecision(coin, e.target.value as Precision)}
-              className="bg-transparent border border-white/10 rounded px-1 py-px text-[9px] text-gray-400 hover:text-gray-200 hover:border-white/20 transition-colors cursor-pointer focus:outline-none focus:border-amber-400/50"
+              className="bg-transparent border border-white/10 rounded px-1 py-px text-[9px] text-gray-400 hover:text-gray-200 hover:border-white/20 cursor-pointer focus:outline-none focus:border-amber-400/50"
               aria-label="Price precision"
             >
               {PRECISION_OPTIONS.map((opt) => (
@@ -162,11 +212,11 @@ export function OrderBook({ coin }: { coin: string }) {
         </div>
 
         {/* Asks (sells) — click to prefill a buy at this price */}
-        {displayAsks.map((level, i) => {
+        {displayAsks.map((level) => {
           const sizeRatio = level.size / maxAskSize
           return (
             <button
-              key={`a-${i}`}
+              key={`a-${level.display}`}
               type="button"
               onClick={() =>
                 window.dispatchEvent(
@@ -175,7 +225,7 @@ export function OrderBook({ coin }: { coin: string }) {
                   }),
                 )
               }
-              className="relative grid grid-cols-3 text-xs font-mono py-0.5 w-full text-left hover:bg-white/5 transition-colors cursor-pointer rounded-sm"
+              className="relative grid grid-cols-3 text-xs font-mono py-0.5 w-full text-left hover:bg-white/5 cursor-pointer rounded-sm"
             >
               <div
                 className="absolute inset-0 bg-no/8 rounded-sm"
@@ -207,11 +257,11 @@ export function OrderBook({ coin }: { coin: string }) {
         </div>
 
         {/* Bids (buys) — click to prefill a sell at this price */}
-        {displayBids.map((level, i) => {
+        {displayBids.map((level) => {
           const sizeRatio = level.size / maxBidSize
           return (
             <button
-              key={`b-${i}`}
+              key={`b-${level.display}`}
               type="button"
               onClick={() =>
                 window.dispatchEvent(
@@ -220,7 +270,7 @@ export function OrderBook({ coin }: { coin: string }) {
                   }),
                 )
               }
-              className="relative grid grid-cols-3 text-xs font-mono py-0.5 w-full text-left hover:bg-white/5 transition-colors cursor-pointer rounded-sm"
+              className="relative grid grid-cols-3 text-xs font-mono py-0.5 w-full text-left hover:bg-white/5 cursor-pointer rounded-sm"
             >
               <div
                 className="absolute inset-0 bg-yes/8 rounded-sm"

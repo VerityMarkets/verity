@@ -11,12 +11,14 @@ interface MarketHeaderProps {
 }
 
 export function MarketHeader({ market, settled, settlementResult }: MarketHeaderProps) {
-  const mids = useMarketStore((s) => s.mids)
+  // Granular selectors — only re-render when *these* coins' mids change, not
+  // on every other coin's allMids tick (allMids fires for the full universe).
+  const yesMidRaw = useMarketStore((s) => s.mids[market.yesCoin])
+  const noMidRaw = useMarketStore((s) => s.mids[market.noCoin])
   const balances = usePortfolioStore((s) => s.balances)
 
-  // Use mid from order book (midpoint of best bid/ask), fallback to allMids
-  const yesMid = mids[market.yesCoin] ? parseFloat(mids[market.yesCoin]) : 0.5
-  const noMid = mids[market.noCoin] ? parseFloat(mids[market.noCoin]) : 0.5
+  const yesMid = yesMidRaw ? parseFloat(yesMidRaw) : 0.5
+  const noMid = noMidRaw ? parseFloat(noMidRaw) : 0.5
 
   // User position: look up token balances for this market's yes/no coins
   const yesTokenCoin = '+' + market.yesCoin.slice(1)
@@ -143,8 +145,10 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
       <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
         <div className="flex-1 mr-4">
           <div className="h-2 rounded-full bg-no/60 overflow-hidden">
+            {/* No transition — width snaps on each WS tick. With frequent
+                updates a 500ms animation never settles and reads as flicker. */}
             <div
-              className="h-full rounded-full bg-yes transition-all duration-500"
+              className="h-full rounded-full bg-yes"
               style={{ width: `${yesPct}%` }}
             />
           </div>

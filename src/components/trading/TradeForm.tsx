@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
 import { useMarketStore } from '@/stores/marketStore'
 import { usePortfolioStore } from '@/stores/portfolioStore'
-import { useOrderBookStore } from '@/stores/orderbookStore'
+import { useOrderBookStore, RAW_SF } from '@/stores/orderbookStore'
 import { useAgentStore } from '@/stores/agentStore'
 import { orderToWire, buildOrderAction, signL1Action } from '@/lib/hyperliquid/signing'
 import { postExchange } from '@/lib/hyperliquid/api'
@@ -32,7 +32,11 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
 
   const { address, isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
-  const mids = useMarketStore((s) => s.mids)
+  // Granular selectors — re-render only when *these* coins' mids/books update.
+  // The full `mids` and `books` objects rev on every WS tick across the
+  // universe; subscribing to them caused page-wide re-renders on every update.
+  const yesMidRaw = useMarketStore((s) => s.mids[market.yesCoin])
+  const noMidRaw = useMarketStore((s) => s.mids[market.noCoin])
   const outcomeQuoteCoin = useMarketStore((s) => s.outcomeQuoteCoin)
   const side = useMarketStore((s) => s.tradeSide)
   const setTradeSide = useMarketStore((s) => s.setTradeSide)
@@ -66,7 +70,7 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
     setShares(String(posShares))
     // Set price from best bid (same logic as clicking the side button in sell mode)
     const coin = posSide === 'yes' ? market.yesCoin : market.noCoin
-    const book = useOrderBookStore.getState().books[coin]
+    const book = useOrderBookStore.getState().books[coin]?.[RAW_SF]
     const bestBid = book?.bids?.length ? parseFloat(book.bids[0].px) : 0
     const mid = useMarketStore.getState().mids[coin]
     const midPrice = mid ? parseFloat(mid) : 0.5
@@ -102,19 +106,20 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
     return () => window.removeEventListener('verity:set-limit-price', handleSetLimit)
   }, [handleSetLimit])
 
-  // Subscribe to book data directly so we re-render when books update
-  const books = useOrderBookStore((s) => s.books)
+  // Subscribe per-coin to the RAW (sf5, full precision) book so fill prices
+  // are derived from un-aggregated best-bid/ask. Only re-renders when this
+  // market's raw slot changes.
+  const yesBook = useOrderBookStore((s) => s.books[market.yesCoin]?.[RAW_SF])
+  const noBook = useOrderBookStore((s) => s.books[market.noCoin]?.[RAW_SF])
 
   // Quote balance from dynamic coin
   const quoteBalance = getBalance(outcomeQuoteCoin)
 
   // Mid prices from allMids (reactive via mids subscription)
-  const yesMid = mids[market.yesCoin] ? parseFloat(mids[market.yesCoin]) : 0.5
-  const noMid = mids[market.noCoin] ? parseFloat(mids[market.noCoin]) : 0.5
+  const yesMid = yesMidRaw ? parseFloat(yesMidRaw) : 0.5
+  const noMid = noMidRaw ? parseFloat(noMidRaw) : 0.5
 
   // Best fill prices from order book (best ask for buying, best bid for selling)
-  const yesBook = books[market.yesCoin]
-  const noBook = books[market.noCoin]
   const yesBestAsk = yesBook?.asks?.length ? parseFloat(yesBook.asks[0].px) : 0
   const noBestAsk = noBook?.asks?.length ? parseFloat(noBook.asks[0].px) : 0
   const yesBestBid = yesBook?.bids?.length ? parseFloat(yesBook.bids[0].px) : 0

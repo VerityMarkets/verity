@@ -15,6 +15,9 @@ export const useTradeStore = create<TradeStore>((set, get) => ({
 
   subscribeTrades: (coin: string) => {
     const currentCoin = get().coin
+    // Idempotent for same-coin re-subscribes so multiple consumers
+    // (RecentTrades + ProbabilityChart) can call freely.
+    if (currentCoin === coin) return
     if (currentCoin) {
       hlWebSocket.unsubscribe(`trades-${currentCoin}`)
     }

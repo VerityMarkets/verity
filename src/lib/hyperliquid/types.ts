@@ -211,6 +211,10 @@ export interface WsSubscription {
   user?: string
   interval?: string
   isPortfolioMargin?: boolean
+  /** For `l2Book` — server-side aggregation by significant figures (2–5). */
+  nSigFigs?: number
+  /** For `l2Book` with `nSigFigs` set — finer-grained mantissa adjustment. */
+  mantissa?: number
 }
 
 export interface WsMessage {

@@ -157,7 +157,7 @@ function ProbabilityHeader({
           {direction}
         </div>
         <div className="flex items-baseline gap-1.5">
-          <span className="text-lg font-bold text-gray-100">{pct}% chance</span>
+          <span className="text-xl font-bold text-gray-100">{pct}% chance</span>
         </div>
       </div>
       <div className="flex items-center gap-3">
@@ -168,7 +168,7 @@ function ProbabilityHeader({
             isExpired={isExpired}
           />
         )}
-        {!isExpired && <VerityWordmark className="h-7 text-gray-600 mr-8" mono />}
+        {!isExpired && <VerityWordmark className="h-6 text-gray-600 mr-8" mono />}
       </div>
     </div>
   )

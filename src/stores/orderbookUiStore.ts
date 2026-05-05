@@ -3,18 +3,21 @@ import { persist } from 'zustand/middleware'
 
 /**
  * Aggregation tick for the order book display.
- *   'auto'  → derived from price magnitude (1¢ when ≥ 1¢, 0.1¢ when ≥ 0.1¢, else 0.01¢)
  *   '1c'    → 1¢   tick (one decimal of probability)
  *   '0.1c'  → 0.1¢ tick (two decimals of probability)
  *   '0.01c' → 0.01¢ tick (HL native, no aggregation)
+ *
+ * No 'auto' — instead, a smart default is computed once per coin from initial
+ * book state (see `defaultPrecision`) and persisted. User can override via the
+ * precision dropdown.
  */
-export type Precision = 'auto' | '1c' | '0.1c' | '0.01c'
+export type Precision = '1c' | '0.1c' | '0.01c'
 
 interface OrderBookUiStore {
-  /** Per-coin precision override; absent = 'auto'. */
+  /** Per-coin precision override; absent = use computed default. */
   precisionByCoin: Record<string, Precision>
   setPrecision: (coin: string, p: Precision) => void
-  getPrecision: (coin: string) => Precision
+  getPrecision: (coin: string) => Precision | undefined
 }
 
 export const useOrderBookUiStore = create<OrderBookUiStore>()(
@@ -23,37 +26,54 @@ export const useOrderBookUiStore = create<OrderBookUiStore>()(
       precisionByCoin: {},
       setPrecision: (coin, p) =>
         set((s) => ({ precisionByCoin: { ...s.precisionByCoin, [coin]: p } })),
-      getPrecision: (coin) => get().precisionByCoin[coin] ?? 'auto',
+      getPrecision: (coin) => {
+        const v = get().precisionByCoin[coin]
+        // Defensive: legacy 'auto' values (pre-migration) read as undefined
+        return v === '1c' || v === '0.1c' || v === '0.01c' ? v : undefined
+      },
     }),
-    { name: 'verity-orderbook-ui' },
+    // Bumped key suffix so legacy 'auto' values don't leak in
+    { name: 'verity-orderbook-ui-v2' },
   ),
 )
 
 /**
- * Resolve a precision setting + book context to a concrete display tick
- * (in "tenths of a basis point" — 100 = 1¢, 10 = 0.1¢, 1 = 0.01¢).
+ * Pick a default precision for a coin from its initial book state. Called
+ * once when the user first views a market that has no stored override; the
+ * result is then persisted so it never reactively shifts.
  *
- * Auto rule combines magnitude AND spread so books cluster aren't collapsed
- * into 2–3 rows. Target: ≥ ~4 distinct rows of separation across the spread.
+ * Bias is toward `1c` (the headline default) — only step finer for low-priced
+ * markets where 1¢ would collapse most of the book into one row.
  *
- *   - sub-0.1¢ markets always finest (0.01¢)
- *   - sub-1¢ markets default to 0.1¢
- *   - else: pick tick ≤ spread / 4 so the visible book has differentiation
+ *   bestAsk ≥ 10¢   → 1c
+ *   bestAsk 1–10¢   → 0.1c
+ *   bestAsk < 1¢    → 0.01c
  */
-export function resolveTick(
-  precision: Precision,
-  bestAskCents: number,
-  bestBidCents: number,
-): 1 | 10 | 100 {
-  if (precision === '1c') return 100
-  if (precision === '0.1c') return 10
-  if (precision === '0.01c') return 1
-  // auto — magnitude floor for low-probability markets
-  if (bestAskCents > 0 && bestAskCents < 0.1) return 1
-  if (bestAskCents > 0 && bestAskCents < 1) return 10
-  // Spread-driven: finer tick when book is tight
-  const spread = bestAskCents > 0 && bestBidCents > 0 ? bestAskCents - bestBidCents : Infinity
-  if (spread >= 4) return 100
-  if (spread >= 0.4) return 10
+export function defaultPrecision(bestAskCents: number): Precision {
+  if (bestAskCents > 0 && bestAskCents < 1) return '0.01c'
+  if (bestAskCents > 0 && bestAskCents < 10) return '0.1c'
+  return '1c'
+}
+
+/**
+ * Map Precision → HL `l2Book` `nSigFigs` for server-side aggregation.
+ *
+ *   1¢    → 2 sig figs (e.g. 0.49)
+ *   0.1¢  → 3 sig figs (e.g. 0.493)
+ *   0.01¢ → 4 sig figs (e.g. 0.4923)
+ */
+export function precisionToNSigFigs(p: Precision): 2 | 3 | 4 {
+  if (p === '1c') return 2
+  if (p === '0.1c') return 3
+  return 4
+}
+
+/**
+ * Map Precision → display tick in "tenths of a basis point"
+ * (100 = 1¢, 10 = 0.1¢, 1 = 0.01¢) — used by the client-side row formatter.
+ */
+export function precisionToTick(p: Precision): 1 | 10 | 100 {
+  if (p === '1c') return 100
+  if (p === '0.1c') return 10
   return 1
 }

@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { useTradeStore } from '@/stores/tradeStore'
-import { formatPriceCents } from '@/lib/marketFormat'
 
 export function RecentTrades({ coin }: { coin: string }) {
   const trades = useTradeStore((s) => s.trades)
@@ -24,7 +23,8 @@ export function RecentTrades({ coin }: { coin: string }) {
           <p className="text-xs text-gray-500 text-center py-4">No trades yet</p>
         ) : (
           trades.slice(0, 20).map((trade) => {
-            const pct = formatPriceCents(parseFloat(trade.px))
+            // Full precision at 0.01¢ tick — never round trade prints
+            const pct = (parseFloat(trade.px) * 100).toFixed(2)
             const isBuy = trade.side === 'B'
             const time = new Date(trade.time)
             const timeStr = `${time.getHours().toString().padStart(2, '0')}:${time

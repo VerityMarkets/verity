@@ -6,6 +6,9 @@ type MessageHandler = (data: unknown) => void
 interface Subscription {
   subscription: WsSubscription
   handler: MessageHandler
+  /** All HL subscriptions registered under this id (for fan-out subscriptions
+   *  where one local id covers multiple HL channel variants). */
+  all?: WsSubscription[]
 }
 
 class HyperliquidWebSocket {
@@ -22,9 +25,9 @@ class HyperliquidWebSocket {
 
     this.ws.onopen = () => {
       this.reconnectDelay = 1000
-      // Resubscribe all active subscriptions
+      // Resubscribe all active subscriptions (including any fan-out variants)
       for (const [, sub] of this.subscriptions) {
-        this.sendSubscribe(sub.subscription)
+        for (const s of sub.all ?? [sub.subscription]) this.sendSubscribe(s)
       }
     }
 
@@ -100,17 +103,32 @@ class HyperliquidWebSocket {
     return true
   }
 
-  subscribe(id: string, subscription: WsSubscription, handler: MessageHandler) {
-    // Skip if already subscribed with the same ID (prevents redundant WS messages)
+  /**
+   * Subscribe to one HL channel under `id`.
+   *
+   * Pass a single `WsSubscription` for normal use. Pass an *array* to fan out
+   * multiple subscribe requests under a single local id — useful when you
+   * want several variants of a channel (e.g. `l2Book` at multiple `nSigFigs`)
+   * all delivered to one handler that demuxes by data. The handler is matched
+   * against incoming messages using the FIRST subscription's `type`/`coin`,
+   * so all variants must share those keys.
+   */
+  subscribe(
+    id: string,
+    subscription: WsSubscription | WsSubscription[],
+    handler: MessageHandler,
+  ) {
     if (this.subscriptions.has(id)) return
-    this.subscriptions.set(id, { subscription, handler })
-    this.sendSubscribe(subscription)
+    const all = Array.isArray(subscription) ? subscription : [subscription]
+    if (all.length === 0) return
+    this.subscriptions.set(id, { subscription: all[0], handler, all })
+    for (const s of all) this.sendSubscribe(s)
   }
 
   unsubscribe(id: string) {
     const sub = this.subscriptions.get(id)
     if (sub) {
-      this.sendUnsubscribe(sub.subscription)
+      for (const s of sub.all ?? [sub.subscription]) this.sendUnsubscribe(s)
       this.subscriptions.delete(id)
     }
   }
