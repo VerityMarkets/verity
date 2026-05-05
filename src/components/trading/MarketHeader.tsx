@@ -1,7 +1,7 @@
 import { useMarketStore } from '@/stores/marketStore'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import { MarketTimer } from '../markets/MarketTimer'
-import { formatExpiryWithTimezone, formatShares } from '@/lib/marketFormat'
+import { formatExpiryWithTimezone, formatShares, formatPriceCents } from '@/lib/marketFormat'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
 
 interface MarketHeaderProps {
@@ -32,8 +32,8 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
   const yesPrice = settled ? (settlementResult === 'yes' ? 1 : 0) : yesMid
   const noPrice = settled ? (settlementResult === 'no' ? 1 : 0) : noMid
 
-  const yesPct = Math.round(yesPrice * 100)
-  const noPct = Math.round(noPrice * 100)
+  const yesPct = formatPriceCents(yesPrice)
+  const noPct = formatPriceCents(noPrice)
 
   const isRecurring = market.class === 'priceBinary'
 
@@ -105,7 +105,7 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
             >
               {formatShares(yesShares)} {market.sideNames[0]}
               <span className="text-yes/30">|</span>
-              {Math.round(yesEntry * 100)}¢
+              {formatPriceCents(yesEntry)}¢
             </button>
           )}
           {noShares > 0 && (
@@ -115,7 +115,7 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
             >
               {formatShares(noShares)} {market.sideNames[1]}
               <span className="text-no/30">|</span>
-              {Math.round(noEntry * 100)}¢
+              {formatPriceCents(noEntry)}¢
             </button>
           )}
 

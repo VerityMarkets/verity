@@ -4,6 +4,15 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      network:
+        description: 'Network to deploy'
+        required: true
+        default: 'mainnet'
+        type: choice
+        options:
+          - mainnet
+          - testnet
 
 jobs:
   build-and-pin:
@@ -18,6 +27,21 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Resolve deployment target
+        id: target
+        run: |
+          # Default to mainnet on push; respect input on workflow_dispatch.
+          NETWORK="${{ inputs.network || 'mainnet' }}"
+          if [ "$NETWORK" = "testnet" ]; then
+            ENS_DOMAIN="test.verity.eth"
+          else
+            ENS_DOMAIN="verity.eth"
+          fi
+          echo "network=${NETWORK}" >> $GITHUB_OUTPUT
+          echo "ens_domain=${ENS_DOMAIN}" >> $GITHUB_OUTPUT
+          echo "Network:    ${NETWORK}"
+          echo "ENS domain: ${ENS_DOMAIN}"
+
       - name: Install dependencies
         run: npm ci
 
@@ -25,12 +49,13 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
+          VITE_NETWORK: ${{ steps.target.outputs.network }}
 
       - name: Pin to IPFS via Pinata
         id: pinata
         env:
           PINATA_JWT: ${{ secrets.PINATA_JWT }}
-          PIN_NAME: verity-${{ github.sha }}
+          PIN_NAME: verity-${{ steps.target.outputs.network }}-${{ github.sha }}
         run: |
           CID=$(node scripts/pinata-upload.mjs)
           echo "hash=${CID}" >> $GITHUB_OUTPUT
@@ -38,8 +63,9 @@ jobs:
       - name: Print deployment URLs
         run: |
           CID="${{ steps.pinata.outputs.hash }}"
+          ENS="${{ steps.target.outputs.ens_domain }}"
           echo "============================================"
-          echo "  Verity deployed to IPFS"
+          echo "  Verity (${{ steps.target.outputs.network }}) deployed to IPFS"
           echo "============================================"
           echo ""
           echo "  CID: ${CID}"
@@ -54,21 +80,23 @@ jobs:
           echo "  https://4everland.io/ipfs/${CID}"
           echo ""
           echo "  ENS:"
-          echo "  https://verity.eth.limo"
+          echo "  https://${ENS}.limo"
           echo ""
           echo "============================================"
 
       - name: Update ENS contenthash
         run: npx tsx scripts/ens-update.ts "${{ steps.pinata.outputs.hash }}"
         env:
-          ENS_DOMAIN: ${{ secrets.ENS_DOMAIN }}
+          ENS_DOMAIN: ${{ steps.target.outputs.ens_domain }}
           PRIVATE_KEY: ${{ secrets.ENS_PRIVATE_KEY }}
           RPC_URL: ${{ secrets.RPC_URL }}
 
       - name: Add deployment summary
         run: |
           CID="${{ steps.pinata.outputs.hash }}"
-          echo "## IPFS Deployment" >> $GITHUB_STEP_SUMMARY
+          ENS="${{ steps.target.outputs.ens_domain }}"
+          NETWORK="${{ steps.target.outputs.network }}"
+          echo "## IPFS Deployment (${NETWORK})" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**CID:** \`${CID}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -77,4 +105,4 @@ jobs:
           echo "| Pinata | https://gateway.pinata.cloud/ipfs/${CID} |" >> $GITHUB_STEP_SUMMARY
           echo "| IPFS.io | https://ipfs.io/ipfs/${CID} |" >> $GITHUB_STEP_SUMMARY
           echo "| 4EVERLAND | https://4everland.io/ipfs/${CID} |" >> $GITHUB_STEP_SUMMARY
-          echo "| ENS | https://verity.eth.limo |" >> $GITHUB_STEP_SUMMARY
+          echo "| ENS | https://${ENS}.limo |" >> $GITHUB_STEP_SUMMARY

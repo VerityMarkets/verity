@@ -1,4 +1,4 @@
-import { NOSTR_RELAYS } from '@/config'
+import { NOSTR_RELAYS, IS_TESTNET } from '@/config'
 import { signNostrEvent } from './identity'
 import { COMMENT_KIND, REACTION_KIND } from './types'
 
@@ -130,14 +130,17 @@ class NostrClient {
       tags.push(['evm', evmAddress])
     }
 
-    // Market scope tag
+    // Market scope tag — namespaced by network so testnet/mainnet are isolated.
+    // Testnet keeps the legacy `verity` namespace (all pre-launch messages used it).
+    // Mainnet gets a fresh `verity-mainnet` namespace.
+    const ns = IS_TESTNET ? 'verity' : 'verity-mainnet'
     if (marketTag) {
-      tags.push(['I', `verity:market:${marketTag}`, 'https://verity.trade'])
-      tags.push(['K', 'verity:market'])
+      tags.push(['I', `${ns}:market:${marketTag}`, 'https://verity.trade'])
+      tags.push(['K', `${ns}:market`])
     }
-    // Always add global tag
-    tags.push(['I', 'verity:global', 'https://verity.trade'])
-    tags.push(['K', 'verity:global'])
+    // Always add global tag (still network-scoped)
+    tags.push(['I', `${ns}:global`, 'https://verity.trade'])
+    tags.push(['K', `${ns}:global`])
 
     // Reply threading
     if (parentId) {

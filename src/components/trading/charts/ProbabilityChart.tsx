@@ -3,6 +3,7 @@ import { createChart, AreaSeries } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts'
 import { fetchCandles } from '@/lib/hyperliquid/api'
 import { useMarketStore } from '@/stores/marketStore'
+import { formatPriceCents } from '@/lib/marketFormat'
 import { getBaseChartOptions, toLocalChartTime } from './chartUtils'
 
 export function ProbabilityChart({ coin }: { coin: string }) {
@@ -30,7 +31,7 @@ export function ProbabilityChart({ coin }: { coin: string }) {
       priceLineVisible: false,
       priceFormat: {
         type: 'custom',
-        formatter: (price: number) => `${Math.round(price * 100)}%`,
+        formatter: (price: number) => `${formatPriceCents(price)}%`,
       },
     })
     seriesRef.current = series

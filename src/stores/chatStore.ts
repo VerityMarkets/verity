@@ -1,7 +1,14 @@
 import { create } from 'zustand'
 import { nostrClient } from '@/lib/nostr/client'
 import { COMMENT_KIND, REACTION_KIND } from '@/lib/nostr/types'
+import { IS_TESTNET } from '@/config'
 import type { ChatMessage } from '@/lib/nostr/types'
+
+// Tag namespace — keep testnet and mainnet chat strictly isolated.
+// Testnet keeps the legacy `verity` namespace (preserves pre-launch history).
+// Mainnet uses a fresh `verity-mainnet` namespace.
+const NS = IS_TESTNET ? 'verity' : 'verity-mainnet'
+const MARKET_PREFIX = `${NS}:market:`
 
 type ChatFilter = 'global' | string // string = market ID
 
@@ -57,16 +64,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       [
         {
           kinds: [COMMENT_KIND],
-          '#K': ['verity:market', 'verity:global'] as never,
+          '#K': [`${NS}:market`, `${NS}:global`] as never,
           limit: 100,
         } as never,
       ],
       (event) => {
         const marketTag =
           event.tags.find(
-            (t) => t[0] === 'I' && t[1]?.startsWith('verity:market:')
+            (t) => t[0] === 'I' && t[1]?.startsWith(MARKET_PREFIX)
           )?.[1]
-            ?.replace('verity:market:', '') ?? null
+            ?.replace(MARKET_PREFIX, '') ?? null
 
         const parentId = event.tags.find((t) => t[0] === 'e')?.[1] ?? null
         const parentPubkey = event.tags.find((t) => t[0] === 'p')?.[1] ?? null

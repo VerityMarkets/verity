@@ -10,6 +10,7 @@ import { orderToWire, buildOrderAction, signL1Action } from '@/lib/hyperliquid/s
 import { postExchange } from '@/lib/hyperliquid/api'
 import { BUILDER_ADDRESS, BUILDER_FEE, DEV_MODE, IS_TESTNET } from '@/config'
 import { getDevSigner, devWalletInjected } from '@/lib/devWallet'
+import { formatFillCents, formatPriceCents } from '@/lib/marketFormat'
 
 type OrderType = 'buy' | 'sell'
 
@@ -70,13 +71,36 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
     const mid = useMarketStore.getState().mids[coin]
     const midPrice = mid ? parseFloat(mid) : 0.5
     const fillPrice = bestBid > 0 ? bestBid : midPrice
-    setPrice(String(Math.floor(fillPrice * 100)))
+    // Sell sweep — floor to a valid sub-cent limit if needed
+    setPrice(formatFillCents(fillPrice, 'floor'))
   }, [setTradeSide, market.yesCoin, market.noCoin])
 
   useEffect(() => {
     window.addEventListener('verity:sell-position', handleSellPosition)
     return () => window.removeEventListener('verity:sell-position', handleSellPosition)
   }, [handleSellPosition])
+
+  // Listen for order-book row clicks → fill limit price (and size)
+  // ask click = prefill a buy at that price; bid click = prefill a sell.
+  const handleSetLimit = useCallback((e: Event) => {
+    const { coin, price: clickedPrice, size, bookSide } = (e as CustomEvent).detail as {
+      coin: string
+      price: string
+      size: number
+      bookSide: 'ask' | 'bid'
+    }
+    if (coin === market.yesCoin) setTradeSide('yes')
+    else if (coin === market.noCoin) setTradeSide('no')
+    else return
+    setOrderType(bookSide === 'ask' ? 'buy' : 'sell')
+    setPrice(clickedPrice)
+    if (size > 0) setShares(String(size))
+  }, [setTradeSide, market.yesCoin, market.noCoin])
+
+  useEffect(() => {
+    window.addEventListener('verity:set-limit-price', handleSetLimit)
+    return () => window.removeEventListener('verity:set-limit-price', handleSetLimit)
+  }, [handleSetLimit])
 
   // Subscribe to book data directly so we re-render when books update
   const books = useOrderBookStore((s) => s.books)
@@ -104,14 +128,15 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
     ? (noBestAsk > 0 ? noBestAsk : noMid)
     : (noBestBid > 0 ? noBestBid : noMid)
 
-  // Round asks up, bids down so the displayed cent price actually crosses for a fill
-  const roundForOrder = orderType === 'buy' ? Math.ceil : Math.floor
-  const yesPrice = roundForOrder(yesFillPrice * 100)
-  const noPrice = roundForOrder(noFillPrice * 100)
-  const midCents = side === 'yes' ? yesPrice : noPrice
+  // Side-aware ceil/floor at smart tick — also a valid limit-input value.
+  // Decimal cents (e.g. "0.5", "99.99") so sub-cent and near-100 prices work.
+  const sweepDir: 'ceil' | 'floor' = orderType === 'buy' ? 'ceil' : 'floor'
+  const yesPriceStr = formatFillCents(yesFillPrice, sweepDir)
+  const noPriceStr = formatFillCents(noFillPrice, sweepDir)
+  const midPriceStr = side === 'yes' ? yesPriceStr : noPriceStr
 
-  // Price in decimal (0-1)
-  const priceCents = price ? parseInt(price, 10) : midCents
+  // Price in decimal (0-1) — parseFloat so the input accepts decimal cents
+  const priceCents = price ? parseFloat(price) : parseFloat(midPriceStr)
   const priceDecimal = priceCents / 100
 
   // Shares → derived values
@@ -214,7 +239,7 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
       if (statuses?.length) {
         const s = statuses[0]
         if (s.filled) {
-          toast.success(`Filled ${s.filled.totalSz} @ ${(parseFloat(s.filled.avgPx) * 100).toFixed(0)}¢`)
+          toast.success(`Filled ${s.filled.totalSz} @ ${formatPriceCents(parseFloat(s.filled.avgPx))}¢`)
         } else if (s.resting) {
           toast.success(`Order resting (oid ${s.resting.oid})`)
         } else {
@@ -280,37 +305,41 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
       {/* Side selector */}
       <div className="grid grid-cols-2 gap-2 mb-4">
         <button
-          onClick={() => { setTradeSide('yes'); setPrice(String(yesPrice)) }}
+          onClick={() => { setTradeSide('yes'); setPrice(yesPriceStr) }}
           className={`py-2.5 rounded-lg text-sm font-semibold transition-all ${
             side === 'yes'
               ? 'bg-yes/20 text-yes border border-yes/30 shadow-lg shadow-yes/5'
               : 'bg-surface-2 text-gray-400 border border-white/5 hover:text-gray-200'
           }`}
         >
-          {market.sideNames[0]} {yesPrice}¢
+          {market.sideNames[0]} {yesPriceStr}¢
         </button>
         <button
-          onClick={() => { setTradeSide('no'); setPrice(String(noPrice)) }}
+          onClick={() => { setTradeSide('no'); setPrice(noPriceStr) }}
           className={`py-2.5 rounded-lg text-sm font-semibold transition-all ${
             side === 'no'
               ? 'bg-no/20 text-no border border-no/30 shadow-lg shadow-no/5'
               : 'bg-surface-2 text-gray-400 border border-white/5 hover:text-gray-200'
           }`}
         >
-          {market.sideNames[1]} {noPrice}¢
+          {market.sideNames[1]} {noPriceStr}¢
         </button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3">
-        {/* Price input */}
+        {/* Price input — supports decimal cents (e.g. 0.5, 99.99) for sub-cent
+            and near-edge HIP-4 markets. +/- step adapts to current magnitude. */}
         <div>
           <label className="text-xs text-gray-500 mb-1 block">Limit Price</label>
           <div className="relative flex items-center">
             <button
               type="button"
-              onClick={() =>
-                setPrice(String(Math.max(1, priceCents - 1)))
-              }
+              onClick={() => {
+                const cur = priceCents || 1
+                const step = cur > 1 ? 1 : cur > 0.1 ? 0.1 : 0.01
+                const next = Math.max(0.01, parseFloat((cur - step).toFixed(2)))
+                setPrice(String(next))
+              }}
               className="absolute left-2 w-6 h-6 flex items-center justify-center rounded bg-surface-3 text-gray-400 hover:text-gray-200 text-sm font-bold z-10"
             >
               −
@@ -321,18 +350,21 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
               onChange={(e) => setPrice(e.target.value)}
               placeholder="0"
               className="input w-full text-center px-10"
-              min="1"
-              max="99"
-              step="1"
+              min="0.01"
+              max="100"
+              step="0.01"
             />
             <span className="absolute right-10 top-1/2 -translate-y-1/2 text-xs text-gray-500">
               ¢
             </span>
             <button
               type="button"
-              onClick={() =>
-                setPrice(String(Math.min(99, priceCents + 1)))
-              }
+              onClick={() => {
+                const cur = priceCents || 0
+                const step = cur >= 1 ? 1 : cur >= 0.1 ? 0.1 : 0.01
+                const next = Math.min(100, parseFloat((cur + step).toFixed(2)))
+                setPrice(String(next))
+              }}
               className="absolute right-2 w-6 h-6 flex items-center justify-center rounded bg-surface-3 text-gray-400 hover:text-gray-200 text-sm font-bold z-10"
             >
               +

@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:mainnet": "VITE_NETWORK=mainnet vite",
     "build": "tsc -b && vite build",
+    "build:testnet": "VITE_NETWORK=testnet tsc -b && VITE_NETWORK=testnet vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
