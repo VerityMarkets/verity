@@ -1,18 +1,25 @@
 name: Build & Deploy to IPFS
 
+# Routing:
+#   push to master       → testnet  (test.verity.eth)
+#   push of `v*` tag     → mainnet  (verity.eth)
+#   manual workflow_dispatch → operator picks the network
+#
+# To ship mainnet: `git tag v1.2.3 && git push origin v1.2.3`
 on:
   push:
     branches: [master]
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       network:
         description: 'Network to deploy'
         required: true
-        default: 'mainnet'
+        default: 'testnet'
         type: choice
         options:
-          - mainnet
           - testnet
+          - mainnet
 
 jobs:
   build-and-pin:
@@ -30,15 +37,27 @@ jobs:
       - name: Resolve deployment target
         id: target
         run: |
-          # Default to mainnet on push; respect input on workflow_dispatch.
-          NETWORK="${{ inputs.network || 'mainnet' }}"
-          if [ "$NETWORK" = "testnet" ]; then
-            ENS_DOMAIN="test.verity.eth"
+          # Resolve which network to deploy based on the trigger:
+          #   - workflow_dispatch  → use the operator's input
+          #   - push of a v* tag   → mainnet
+          #   - push to master     → testnet (default)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            NETWORK="${{ inputs.network }}"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            NETWORK="mainnet"
           else
-            ENS_DOMAIN="verity.eth"
+            NETWORK="testnet"
           fi
+
+          if [ "$NETWORK" = "mainnet" ]; then
+            ENS_DOMAIN="verity.eth"
+          else
+            ENS_DOMAIN="test.verity.eth"
+          fi
+
           echo "network=${NETWORK}" >> $GITHUB_OUTPUT
           echo "ens_domain=${ENS_DOMAIN}" >> $GITHUB_OUTPUT
+          echo "Trigger:    ${{ github.event_name }} (${{ github.ref }})"
           echo "Network:    ${NETWORK}"
           echo "ENS domain: ${ENS_DOMAIN}"
 
