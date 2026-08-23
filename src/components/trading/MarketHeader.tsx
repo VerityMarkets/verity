@@ -2,6 +2,8 @@ import { useMarketStore } from '@/stores/marketStore'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import { MarketTimer } from '../markets/MarketTimer'
 import { formatExpiryWithTimezone, formatShares, formatPriceCents } from '@/lib/marketFormat'
+import { CoinLogo } from '@/components/common/CoinLogo'
+import { SeriesStrip } from './SeriesStrip'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
 
 interface MarketHeaderProps {
@@ -52,7 +54,9 @@ export function MarketHeader({ market, settled, settlementResult, settleFraction
   return (
     <div className="card p-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
+        <div className="flex items-start gap-3 min-w-0">
+          {market.underlying && <CoinLogo symbol={market.underlying} size={40} className="mt-0.5" />}
+          <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs text-gray-500 font-mono">
               #{market.outcomeId}
@@ -106,6 +110,7 @@ export function MarketHeader({ market, settled, settlementResult, settleFraction
           {!isRecurring && market.description && (
             <p className="text-xs text-gray-400 mt-1">{market.description}</p>
           )}
+          </div>
         </div>
 
         <div className="flex items-center gap-4 shrink-0">
@@ -150,6 +155,13 @@ export function MarketHeader({ market, settled, settlementResult, settleFraction
           </div>
         </div>
       </div>
+
+      {/* Sibling markets in this series (same underlying · period · expiry) */}
+      {!settled && (
+        <div className="mt-3">
+          <SeriesStrip market={market} />
+        </div>
+      )}
 
       {/* Progress bar + timer */}
       <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">

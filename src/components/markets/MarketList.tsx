@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useMarketStore } from '@/stores/marketStore'
-import { MarketCard } from './MarketCard'
+import { SeriesCard } from './SeriesCard'
+import { groupBySeries } from '@/lib/series'
 import { getMarketCategory, getCategoryDef } from '@/categories'
 import type { Category } from './CategoryBar'
 
@@ -54,6 +55,10 @@ export function MarketList({ category = 'trending' }: { category?: Category }) {
     return list
   }, [markets, category, getYesPrice])
 
+  // Group related markets (same underlying · period · expiry) into one card,
+  // preserving the order of their first member from the sort above.
+  const series = useMemo(() => groupBySeries(filtered), [filtered])
+
   if (loading && markets.length === 0) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -89,9 +94,9 @@ export function MarketList({ category = 'trending' }: { category?: Category }) {
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {filtered.map((market) => (
-        <MarketCard key={market.outcomeId} market={market} />
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
+      {series.map((s) => (
+        <SeriesCard key={s.key} series={s} />
       ))}
     </div>
   )

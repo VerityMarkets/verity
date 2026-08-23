@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMarketStore } from '@/stores/marketStore'
+import { CoinLogo } from '@/components/common/CoinLogo'
 
 /** Build a readable market title. Recurring markets have name "Recurring". */
 function marketTitle(m: { name: string; class: string; underlying: string; targetPrice: number }): string {
   if (m.class === 'priceBinary' && m.underlying && m.targetPrice) {
     return `Will ${m.underlying} be above $${m.targetPrice.toLocaleString()}?`
   }
+  if (m.class === 'priceBucket') return `Will ${m.name.replace(/^\S+\s/, `${m.underlying} settle `)}?`
   return m.name
 }
 
@@ -97,6 +99,7 @@ export function SearchDropdown({ className = '', placeholder = 'Search markets..
                 onClick={() => select(m.outcomeId)}
                 className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface-2/50 transition-colors text-left"
               >
+                {m.underlying && <CoinLogo symbol={m.underlying} size={24} className="mr-3" />}
                 <div className="flex-1 min-w-0 mr-3">
                   <div className="text-sm text-gray-200 truncate">
                     {marketTitle(m)}
