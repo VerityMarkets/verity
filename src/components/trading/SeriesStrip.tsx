@@ -46,7 +46,7 @@ export function SeriesStrip({ market }: { market: ParsedMarket }) {
 
   return (
     <div className="flex items-center gap-2 overflow-x-auto pb-1 -mb-1 [scrollbar-width:none]">
-      {series.rows.map((r) => (
+      {[...series.rows.filter((r) => !r.isBinary), ...series.rows.filter((r) => r.isBinary)].map((r) => (
         <Chip key={r.market.outcomeId} row={r} active={r.market.outcomeId === market.outcomeId} tagBinary={series.hasBuckets} />
       ))}
     </div>

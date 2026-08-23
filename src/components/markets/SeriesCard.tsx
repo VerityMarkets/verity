@@ -32,7 +32,7 @@ function SeriesRowView({ row, tagBinary }: { row: SeriesRow; tagBinary: boolean 
         tagBinary && row.isBinary ? 'bg-amber-500/[0.06]' : ''
       }`}
     >
-      <span className="text-sm text-gray-200 whitespace-nowrap overflow-hidden text-ellipsis min-w-0 tabular-nums">
+      <span className="text-sm text-gray-200 whitespace-nowrap min-w-0 tabular-nums">
         <RowIcon kind={row.kind} />
         {row.label}
         {tagBinary && row.isBinary && (
@@ -105,6 +105,8 @@ function BucketBar({ rows }: { rows: SeriesRow[] }) {
 export function SeriesCard({ series }: { series: Series }) {
   const single = series.rows.length === 1
   const first = series.rows[0]?.market
+  const bucketRows = series.rows.filter((r) => !r.isBinary)
+  const binaryRows = series.rows.filter((r) => r.isBinary)
 
   return (
     <div className="card p-4 hover:border-amber-500/20 transition-all break-inside-avoid mb-4">
@@ -133,12 +135,21 @@ export function SeriesCard({ series }: { series: Series }) {
       </div>
 
       <div className="space-y-0.5">
-        {series.rows.map((row) => (
+        {bucketRows.map((row) => (
           <SeriesRowView key={row.market.outcomeId} row={row} tagBinary={series.hasBuckets} />
         ))}
       </div>
 
-      {series.hasBuckets && <BucketBar rows={series.rows} />}
+      {series.hasBuckets && <BucketBar rows={bucketRows} />}
+
+      {/* Standalone binaries sit below the continuous bucket ladder */}
+      {binaryRows.length > 0 && (
+        <div className={`space-y-0.5 ${bucketRows.length ? 'mt-2 pt-2 border-t border-white/5' : ''}`}>
+          {binaryRows.map((row) => (
+            <SeriesRowView key={row.market.outcomeId} row={row} tagBinary={series.hasBuckets} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
