@@ -1,5 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useMarketStore } from '@/stores/marketStore'
+import { useOrderBookStore } from '@/stores/orderbookStore'
+import { useMarketMid } from '@/hooks/useMarketMid'
 import { formatPriceCents } from '@/lib/marketFormat'
 import { seriesTitle, rowGlyph, compactUsd, type Series, type SeriesRow } from '@/lib/series'
 import { CoinLogo } from '@/components/common/CoinLogo'
@@ -11,11 +13,20 @@ function RowIcon({ kind }: { kind: SeriesRow['kind'] }) {
   return <span className={kind === 'below' ? 'text-no' : 'text-yes'}>{g} </span>
 }
 
+/** Book state for a Yes coin: undefined = not loaded yet; quoted = at least one side has levels. */
+function useQuoteState(coin: string): { loaded: boolean; quoted: boolean; twoSided: boolean } {
+  const nBids = useOrderBookStore((s) => s.books[coin]?.bids.length)
+  const nAsks = useOrderBookStore((s) => s.books[coin]?.asks.length)
+  const loaded = nBids !== undefined
+  return { loaded, quoted: loaded && ((nBids ?? 0) > 0 || (nAsks ?? 0) > 0), twoSided: (nBids ?? 0) > 0 && (nAsks ?? 0) > 0 }
+}
+
 function SeriesRowView({ row, tagBinary }: { row: SeriesRow; tagBinary: boolean }) {
   const navigate = useNavigate()
   const m = row.market
-  const midRaw = useMarketStore((s) => s.mids[m.yesCoin])
-  const yes = midRaw ? parseFloat(midRaw) : 0.5
+  const yes = useMarketMid(m.yesCoin)
+  const { loaded, quoted } = useQuoteState(m.yesCoin)
+  const unquoted = loaded && !quoted
   const pct = Math.round(yes * 100)
 
   const go = (side: 'yes' | 'no') => (e: React.MouseEvent) => {
@@ -39,19 +50,30 @@ function SeriesRowView({ row, tagBinary }: { row: SeriesRow; tagBinary: boolean 
           <span className="ml-1 text-[9px] uppercase tracking-wide text-amber-400/80 font-semibold">bin</span>
         )}
       </span>
-      <span className="text-sm font-bold text-gray-100 tabular-nums w-9 text-right">{pct}%</span>
-      <button
-        onClick={go('yes')}
-        className="w-12 py-1 rounded-md text-xs font-semibold bg-yes/15 text-yes hover:bg-yes/25 transition-colors tabular-nums"
-      >
-        {formatPriceCents(yes)}¢
-      </button>
-      <button
-        onClick={go('no')}
-        className="w-12 py-1 rounded-md text-xs font-semibold bg-no/15 text-no hover:bg-no/25 transition-colors tabular-nums"
-      >
-        {formatPriceCents(1 - yes)}¢
-      </button>
+      {unquoted ? (
+        <>
+          <span className="text-sm font-bold text-gray-500 tabular-nums w-9 text-right">—</span>
+          <span className="col-span-2 w-[104px] py-1 rounded-md text-[10px] text-center text-gray-500 bg-surface-3/60">
+            no quotes yet
+          </span>
+        </>
+      ) : (
+        <>
+          <span className="text-sm font-bold text-gray-100 tabular-nums w-9 text-right">{pct}%</span>
+          <button
+            onClick={go('yes')}
+            className="w-12 py-1 rounded-md text-xs font-semibold bg-yes/15 text-yes hover:bg-yes/25 transition-colors tabular-nums"
+          >
+            {formatPriceCents(yes)}¢
+          </button>
+          <button
+            onClick={go('no')}
+            className="w-12 py-1 rounded-md text-xs font-semibold bg-no/15 text-no hover:bg-no/25 transition-colors tabular-nums"
+          >
+            {formatPriceCents(1 - yes)}¢
+          </button>
+        </>
+      )}
     </Link>
   )
 }
@@ -62,12 +84,28 @@ function SeriesRowView({ row, tagBinary }: { row: SeriesRow; tagBinary: boolean 
  * at the segment boundaries, so nothing is repeated.
  */
 function BucketBar({ rows }: { rows: SeriesRow[] }) {
-  const mids = useMarketStore((s) => s.mids)
+  const books = useOrderBookStore((s) => s.books)
   const buckets = rows.filter((r) => !r.isBinary && r.kind !== 'other')
   if (buckets.length < 2) return null
-  const vals = buckets.map((r) => (mids[r.market.yesCoin] ? parseFloat(mids[r.market.yesCoin]) : 0))
-  const total = vals.reduce((a, b) => a + b, 0) || 1
-  const pcts = vals.map((v) => (v / total) * 100)
+
+  // A bucket's share is only "known" when its book is two-sided; unknown
+  // buckets split whatever probability the known ones leave over, in grey.
+  const known = buckets.map((r) => {
+    const b = books[r.market.yesCoin]
+    return !!(b && b.bids.length && b.asks.length)
+  })
+  if (!known.some(Boolean)) return null
+  const vals = buckets.map((r, i) => {
+    if (!known[i]) return 0
+    const b = books[r.market.yesCoin]!
+    return (parseFloat(b.bids[0].px) + parseFloat(b.asks[0].px)) / 2
+  })
+  const knownSum = vals.reduce((a, b) => a + b, 0)
+  const nUnknown = known.filter((k) => !k).length
+  const leftover = Math.max(0, 1 - knownSum)
+  const shares = vals.map((v, i) => (known[i] ? v : leftover / Math.max(1, nUnknown)))
+  const total = shares.reduce((a, b) => a + b, 0) || 1
+  const pcts = shares.map((v) => (v / total) * 100)
   const colors = ['bg-no/60', 'bg-amber-400/70', 'bg-yes/60', 'bg-blue-400/60', 'bg-purple-400/60']
   // boundary positions (cumulative %) and the threshold each marks
   const bounds: { left: number; label: string }[] = []
@@ -83,10 +121,13 @@ function BucketBar({ rows }: { rows: SeriesRow[] }) {
         {pcts.map((p, i) => (
           <div
             key={i}
-            className={`${colors[i % colors.length]} flex items-center justify-center text-gray-950/80 overflow-hidden`}
+            className={`${known[i] ? colors[i % colors.length] : 'bg-surface-3'} flex items-center justify-center overflow-hidden ${
+              known[i] ? 'text-gray-950/80' : 'text-gray-500'
+            }`}
             style={{ width: `${p}%` }}
+            title={known[i] ? undefined : 'No quotes yet'}
           >
-            {p >= 9 ? `${Math.round(p)}%` : ''}
+            {known[i] ? (p >= 9 ? `${Math.round(p)}%` : '') : p >= 9 ? '—' : ''}
           </div>
         ))}
       </div>
@@ -119,7 +160,7 @@ export function SeriesCard({ series }: { series: Series }) {
           >
             {seriesTitle(series)}
           </Link>
-          <div className="flex items-center gap-2 mt-0.5 text-[10px] text-gray-500">
+          <div className="flex items-center gap-2 mt-1.5 text-[10px] text-gray-500">
             {series.period && (
               <span className="font-semibold text-gray-400 bg-surface-3 px-1.5 rounded leading-4">{series.period}</span>
             )}
