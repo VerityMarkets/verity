@@ -92,8 +92,8 @@ function BucketBar({ rows }: { rows: SeriesRow[] }) {
       </div>
       <div className="relative h-5 text-[10px] text-gray-400 tabular-nums">
         {bounds.map((b, i) => (
-          <div key={i} className="absolute top-0" style={{ left: `${b.left}%` }}>
-            <div className="w-px h-1.5 bg-gray-500 mx-auto" />
+          <div key={i} className="absolute top-0 w-0" style={{ left: `${b.left}%` }}>
+            <div className="w-px h-1.5 bg-gray-500" />
             <div className="-translate-x-1/2 whitespace-nowrap leading-none mt-0.5">{b.label}</div>
           </div>
         ))}
