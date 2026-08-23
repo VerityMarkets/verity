@@ -1,8 +1,21 @@
 import { create } from 'zustand'
-import { fetchOutcomeMeta, fetchSpotMeta, fetchSettledOutcome } from '@/lib/hyperliquid/api'
+import {
+  fetchOutcomeMeta,
+  fetchOutcomeTemplates,
+  fetchSpotMeta,
+  fetchSettledOutcome,
+} from '@/lib/hyperliquid/api'
 import { hlWebSocket } from '@/lib/hyperliquid/websocket'
-import { toCoin, toAssetId } from '@/lib/hyperliquid/encoding'
-import type { ParsedMarket, AllMids, SpotMeta, Outcome, Question } from '@/lib/hyperliquid/types'
+import { outcomeToParsedMarket } from '@/lib/parseMarket'
+import { indexTemplates, type TemplateMap } from '@/lib/templates'
+import { parseExpiry } from '@/lib/marketFormat'
+import type {
+  ParsedMarket,
+  AllMids,
+  SpotMeta,
+  OutcomeTemplate,
+  Question,
+} from '@/lib/hyperliquid/types'
 
 interface SettledMarketInfo {
   market: ParsedMarket
@@ -10,81 +23,40 @@ interface SettledMarketInfo {
   details: string
 }
 
-function parseDescription(desc: string): Record<string, string> {
-  const parts: Record<string, string> = {}
-  desc.split('|').forEach((part) => {
-    const [key, value] = part.split(':')
-    if (key && value) parts[key] = value
-  })
-  return parts
-}
-
-const fmtUsd = (n: number) => '$' + n.toLocaleString(undefined, { maximumFractionDigits: 6 })
-
-/** Human label for bucket `index` of a priceBucket question. */
-function bucketLabel(underlying: string, thresholds: number[], index: number): string {
-  if (index <= 0) return `${underlying} below ${fmtUsd(thresholds[0])}`
-  if (index >= thresholds.length) return `${underlying} above ${fmtUsd(thresholds[thresholds.length - 1])}`
-  return `${underlying} between ${fmtUsd(thresholds[index - 1])} and ${fmtUsd(thresholds[index])}`
-}
-
 /**
- * Parse an outcome into a ParsedMarket.
- *
- * Standalone outcomes carry their own description
- *   "class:priceBinary|underlying:BTC|expiry:20260823-0600|targetPrice:77431|period:1d".
- * Named outcomes of a multi-outcome *question* only carry "index:N" — the
- * class/underlying/expiry/thresholds live on the question's description
- *   "class:priceBucket|underlying:BTC|expiry:...|priceThresholds:75882,78979|period:1d".
- * The question's fallback outcome has description "other".
+ * How long after its deadline a market stays listed. HL settles a few minutes
+ * to a couple of hours late; dropping it the instant the clock hits zero makes
+ * live positions vanish from the UI mid-settlement.
  */
-function outcomeToParsedMarket(o: Outcome, q?: Question): ParsedMarket {
-  const own = parseDescription(o.description)
-  const parsed = q ? parseDescription(q.description) : own
-  const thresholds = parsed.priceThresholds
-    ? parsed.priceThresholds.split(',').map((t) => parseFloat(t)).filter((n) => Number.isFinite(n))
-    : undefined
-  const underlying = parsed.underlying ?? ''
+const SETTLEMENT_GRACE_MS = 2 * 60 * 60 * 1000
 
-  let name = o.name
-  let bucketIndex: number | undefined
-  if (q) {
-    const isFallback = q.fallbackOutcome === o.outcome
-    bucketIndex = isFallback ? -1 : parseInt(own.index ?? '', 10)
-    if (isFallback) name = `${q.name}: none of the above`
-    else if (thresholds && thresholds.length && underlying && Number.isFinite(bucketIndex)) {
-      name = bucketLabel(underlying, thresholds, bucketIndex)
-    } else name = `${q.name} #${Number.isFinite(bucketIndex) ? bucketIndex : '?'}`
-  }
+/** `true` once the market's deadline is more than the grace period in the past. */
+function isStale(m: ParsedMarket, now: number): boolean {
+  if (!m.expiry) return false
+  const d = parseExpiry(m.expiry)
+  return !!d && d.getTime() < now - SETTLEMENT_GRACE_MS
+}
 
-  return {
-    outcomeId: o.outcome,
-    name,
-    description: q ? q.description : o.description,
-    class: parsed.class ?? '',
-    underlying,
-    expiry: parsed.expiry ?? '',
-    targetPrice: parsed.targetPrice ? parseFloat(parsed.targetPrice) : 0,
-    period: parsed.period ?? '',
-    sideNames: [
-      o.sideSpecs[0]?.name ?? 'Yes',
-      o.sideSpecs[1]?.name ?? 'No',
-    ] as [string, string],
-    yesCoin: toCoin(o.outcome, 0),
-    noCoin: toCoin(o.outcome, 1),
-    yesAssetId: toAssetId(o.outcome, 0),
-    noAssetId: toAssetId(o.outcome, 1),
-    quoteToken: o.quoteToken ?? 'USDC',
-    questionId: q?.question,
-    bucketIndex,
-    priceThresholds: thresholds,
+// The template catalogue is static per network; fetch it once per session and
+// keep one Map built from it (rebuilt only when the array identity changes).
+let templatesOnce: Promise<OutcomeTemplate[]> | null = null
+let templateIndexCache: { list: OutcomeTemplate[]; map: TemplateMap } | null = null
+
+function templateIndex(list: OutcomeTemplate[]): TemplateMap {
+  if (!templateIndexCache || templateIndexCache.list !== list) {
+    templateIndexCache = { list, map: indexTemplates(list) }
   }
+  return templateIndexCache.map
 }
 
 interface MarketStore {
   /** Tradable markets shown in lists: standalone outcomes + named question
-   *  outcomes (each is a Yes/No token pair). Question fallbacks are excluded. */
+   *  outcomes (each is a Yes/No token pair). Question fallbacks are excluded,
+   *  as are markets past their deadline by more than the settlement grace. */
   markets: ParsedMarket[]
+  /** Past-deadline markets HL has not settled yet — for an "awaiting
+   *  settlement" view. Excluded from `markets`, still in `allOutcomes`. */
+  staleMarkets: ParsedMarket[]
   /** Every outcome from outcomeMeta (incl. question fallbacks), keyed by id —
    *  used to resolve balances/orders/fills that reference any outcome. */
   allOutcomes: Map<number, ParsedMarket>
@@ -92,6 +64,8 @@ interface MarketStore {
   settledOutcomes: Map<number, SettledMarketInfo>
   mids: AllMids
   spotMeta: SpotMeta | null
+  /** Permissionless template catalogue; `[]` on mainnet / when unavailable. */
+  templates: OutcomeTemplate[]
   outcomeQuoteCoin: string
   loading: boolean
   error: string | null
@@ -113,10 +87,12 @@ interface MarketStore {
 
 export const useMarketStore = create<MarketStore>((set, get) => ({
   markets: [],
+  staleMarkets: [],
   allOutcomes: new Map(),
   settledOutcomes: new Map(),
   mids: {},
   spotMeta: null,
+  templates: [],
   outcomeQuoteCoin: '',
   loading: false,
   error: null,
@@ -130,10 +106,13 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
     try {
       // spotMeta is static for our purposes (USDH/USDC swap pair lookup) and
       // costs the same rate-limit weight as outcomeMeta — fetch it once.
-      const [meta, spotMeta] = await Promise.all([
+      // Same for the permissionless template catalogue.
+      const [meta, spotMeta, templates] = await Promise.all([
         fetchOutcomeMeta(),
         get().spotMeta ?? fetchSpotMeta(),
+        (templatesOnce ??= fetchOutcomeTemplates()),
       ])
+      const templateMap = templateIndex(templates)
 
       // Map every outcome that belongs to a question → its question
       const questionOf = new Map<number, Question>()
@@ -144,11 +123,16 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
 
       const allOutcomes = new Map<number, ParsedMarket>()
       for (const o of meta.outcomes) {
-        allOutcomes.set(o.outcome, outcomeToParsedMarket(o, questionOf.get(o.outcome)))
+        allOutcomes.set(o.outcome, outcomeToParsedMarket(o, questionOf.get(o.outcome), templateMap))
       }
       // Listed markets: everything except question fallbacks ("none of the
-      // above" — no book, 0.5 placeholder mid; kept in allOutcomes only).
-      const markets = [...allOutcomes.values()].filter((m) => m.bucketIndex !== -1)
+      // above" — no book, 0.5 placeholder mid; kept in allOutcomes only) and
+      // markets whose deadline passed longer ago than the settlement grace.
+      const now = Date.now()
+      const listable = [...allOutcomes.values()].filter((m) => m.bucketIndex !== -1)
+      const markets: ParsedMarket[] = []
+      const staleMarkets: ParsedMarket[] = []
+      for (const m of listable) (isStale(m, now) ? staleMarkets : markets).push(m)
 
       // Quote token is per-outcome (USDC on mainnet, USDH on legacy testnet).
       // Expose the dominant one for global balance widgets.
@@ -176,8 +160,10 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
 
       set({
         markets,
+        staleMarkets,
         allOutcomes,
         spotMeta,
+        templates,
         outcomeQuoteCoin,
         loading: false,
       })
@@ -244,7 +230,7 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
           }
         : undefined
       const info: SettledMarketInfo = {
-        market: outcomeToParsedMarket(settled.spec, q),
+        market: outcomeToParsedMarket(settled.spec, q, templateIndex(get().templates)),
         settleFraction: settled.settleFraction,
         details: settled.details,
       }

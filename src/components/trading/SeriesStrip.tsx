@@ -29,7 +29,8 @@ function Chip({ row, active, tagBinary }: { row: SeriesRow; active: boolean; tag
           : 'bg-surface-2 text-gray-300 border-white/5 hover:text-gray-100 hover:border-white/15'
       }`}
     >
-      {row.kind !== 'between' && (
+      {/* Only price rows carry a direction; question members are plain labels. */}
+      {(row.kind === 'below' || row.kind === 'above') && (
         <span className={row.kind === 'below' ? 'text-no' : 'text-yes'}>
           {row.kind === 'below' ? '↓' : '↑'}
         </span>

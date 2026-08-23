@@ -51,7 +51,25 @@ export const categories: CategoryDef[] = [
       underlying: /^(BTC|ETH|SOL|HYPE|DOGE|XRP|ADA|DOT|AVAX|MATIC|LINK|UNI|AAVE|OP|ARB|SUI|APT|SEI|TIA|JUP|WIF|BONK|PEPE)/i,
     },
   },
+  {
+    id: 'economics',
+    label: 'Economics',
+    type: 'content',
+    match: {
+      keywords: /\b(cpi|inflation|fed|fomc|rate decision|interest rate|unemployment|gdp)\b/i,
+    },
+  },
 ]
+
+/**
+ * `metadata=category:…` tag (from the deployer's template) → our category id.
+ * Anything unmapped falls through to the keyword/underlying rules below.
+ */
+const TAG_TO_CATEGORY: Record<string, string> = {
+  sports: 'sports',
+  price: 'crypto',
+  economics: 'economics',
+}
 
 // ---------------------------------------------------------------------------
 // Manual overrides: outcomeId → category id
@@ -69,6 +87,11 @@ export const manualCategoryMap: Record<number, string> = {
 export function getMarketCategory(market: ParsedMarket): string {
   const manual = manualCategoryMap[market.outcomeId]
   if (manual) return manual
+
+  // The deployer's own tag beats our heuristics — "World Cup … v …" is sports
+  // even though the keyword rules would never have to guess.
+  const tagged = market.category ? TAG_TO_CATEGORY[market.category] : undefined
+  if (tagged) return tagged
 
   for (const cat of categories) {
     if (cat.type !== 'content' || !cat.match) continue

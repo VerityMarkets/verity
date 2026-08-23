@@ -35,7 +35,13 @@ function SeriesRowView({ row, tagBinary }: { row: SeriesRow; tagBinary: boolean 
         tagBinary && row.isBinary ? 'bg-amber-500/[0.06]' : ''
       }`}
     >
-      <span className="text-sm text-gray-200 whitespace-nowrap min-w-0 tabular-nums">
+      {/* Price rows are short and must stay on one line; text rows (question
+          members, template titles) wrap instead of overlapping the prices. */}
+      <span
+        className={`text-sm text-gray-200 min-w-0 ${
+          row.kind === 'other' ? 'break-words leading-snug' : 'whitespace-nowrap tabular-nums'
+        }`}
+      >
         <RowIcon kind={row.kind} />
         {row.label}
         {tagBinary && row.isBinary && (

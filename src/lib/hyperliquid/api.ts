@@ -1,6 +1,7 @@
 import { API_URL } from '@/config'
 import type {
   OutcomeMeta,
+  OutcomeTemplate,
   SettledOutcome,
   SpotMeta,
   Candle,
@@ -58,6 +59,21 @@ export function fetchOutcomeMeta(): Promise<OutcomeMeta> {
 
 export function fetchSpotMeta(): Promise<SpotMeta> {
   return postInfo<SpotMeta>({ type: 'spotMeta' })
+}
+
+/**
+ * Catalogue of permissionless outcome templates (name/description format
+ * strings + keyword lists). Mainnet has no deployers today and the endpoint may
+ * be absent there, so failures resolve to `[]` — every consumer degrades to the
+ * raw template id.
+ */
+export async function fetchOutcomeTemplates(): Promise<OutcomeTemplate[]> {
+  try {
+    const list = await postInfo<OutcomeTemplate[]>({ type: 'outcomeTemplates' })
+    return Array.isArray(list) ? list : []
+  } catch {
+    return []
+  }
 }
 
 export function fetchCandles(

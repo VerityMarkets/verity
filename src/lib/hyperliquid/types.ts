@@ -11,6 +11,10 @@ export interface Outcome {
   sideSpecs: SideSpec[]
   /** Quote token symbol — 'USDC' on mainnet, 'USDH' on (legacy) testnet outcomes. */
   quoteToken?: string
+  /** Deployer venue tag for permissionless markets; null/absent for protocol ones. */
+  venue?: string | null
+  /** Deployer's share of the fee scale, e.g. "1.0"; null/absent for protocol ones. */
+  deployerFeeScale?: string | null
 }
 
 export interface Question {
@@ -41,7 +45,40 @@ export interface SettledOutcome {
   question?: { question: { settled: number }; name: string; description: string }
 }
 
+// --- Outcome templates (permissionless / deployer markets) ---
+
+/**
+ * What an `outcomeTemplates` entry can be instantiated as:
+ *  - `'question'` — a multi-outcome question (its members use `questionOutcome`)
+ *  - `standaloneOutcome` — a Yes/No pair with its own side names
+ *  - `questionOutcome` — a named outcome of a `parent` question template
+ */
+export type TemplateRole =
+  | 'question'
+  | { standaloneOutcome: { sideNames: string[] } }
+  | { questionOutcome: { parent: string } }
+
+export interface OutcomeTemplate {
+  id: string
+  role: TemplateRole
+  /** Display-name format string with `{keyword}` placeholders. */
+  name: string
+  /** Rules prose; may end with a `metadata=category:x|subCategory:y` tail. */
+  description: string
+  /** `[keyword, type]` pairs, e.g. `["scheduledStart", "dateTime"]`. */
+  keywords: [string, string][]
+}
+
 // --- Parsed market info ---
+
+/**
+ * Shape of a listed market:
+ *  - `price`           protocol recurring priceBinary / priceBucket ladders
+ *  - `template`        standalone permissionless market from a deployer template
+ *  - `question-member` a named outcome (or fallback) of a multi-outcome question
+ *  - `freeform`        a hand-written standalone outcome (no template, no kv)
+ */
+export type MarketKind = 'price' | 'template' | 'question-member' | 'freeform'
 
 export interface ParsedMarket {
   outcomeId: number
@@ -49,6 +86,7 @@ export interface ParsedMarket {
   description: string
   class: string
   underlying: string
+  /** Settlement deadline, `YYYYMMDD-HHMM` UTC; '' when the market has no date. */
   expiry: string
   targetPrice: number
   period: string
@@ -65,6 +103,26 @@ export interface ParsedMarket {
   bucketIndex?: number
   /** Price thresholds for priceBucket questions. */
   priceThresholds?: number[]
+  /** Which parsing branch produced this market — drives grouping and layout. */
+  kind: MarketKind
+  /** Template id (without the `template:` prefix) when this is a template market. */
+  templateId?: string
+  /** 'sports' | 'price' | 'economics' … from the template's `metadata=` tail. */
+  category?: string
+  /** e.g. 'football' — 'N/A' and unresolved placeholders are dropped. */
+  subCategory?: string
+  /** Event/scheduled start (`YYYYMMDD-HHMM` UTC) when distinct from `expiry`. */
+  startsAt?: string
+  /** Deployer venue tag; null for protocol markets. */
+  venue?: string | null
+  /** Deployer's fee scale; null for protocol markets. */
+  deployerFeeScale?: string | null
+  /** Resolution source named by the template, e.g. 'ESPN'. */
+  officialSource?: string
+  /** Parsed `k:v|k:v` description (question members: parent's keys + own). */
+  kv?: Record<string, string>
+  /** Resolved title of the parent question, for question members. */
+  questionName?: string
 }
 
 // --- Spot Meta ---

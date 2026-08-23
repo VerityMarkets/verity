@@ -1,11 +1,16 @@
-import type { ParsedMarket } from '@/lib/hyperliquid/types'
+import type { MarketKind, ParsedMarket } from '@/lib/hyperliquid/types'
 import { parseExpiry } from '@/lib/marketFormat'
 
 /**
- * A "series" is every tradable market on the same underlying, period and
- * expiry — on mainnet today that is one standalone binary ("BTC above X")
- * plus the named outcomes of one price-bucket question, all settling at the
- * same 06:00 UTC timestamp. The UI groups them into one card / one strip.
+ * A "series" is a group of markets the UI shows on one card / one strip.
+ *
+ *  - price markets group by underlying · period · expiry — on mainnet that is
+ *    one standalone binary ("BTC above X") plus the named outcomes of one
+ *    price-bucket question, all settling at the same 06:00 UTC timestamp;
+ *  - members of a multi-outcome question group by that question ("Cats" /
+ *    "Draw" / "Humans");
+ *  - everything else (standalone templates, hand-written prose markets) is its
+ *    own single-row series.
  */
 export interface SeriesRow {
   market: ParsedMarket
@@ -24,10 +29,19 @@ export interface Series {
   underlying: string
   period: string
   expiry: string
-  /** Ladder-sorted rows (ascending by price level) */
+  /** Ladder-sorted rows (ascending by price level) for price series; input order otherwise */
   rows: SeriesRow[]
   /** Whether the series contains a bucket question (rows that sum to ~100%) */
   hasBuckets: boolean
+  /** Shape of the markets in this series (taken from the first row). */
+  kind: MarketKind
+  /** 'sports' | 'price' | 'economics' … when the deployer tagged it. */
+  category?: string
+  subCategory?: string
+  /** Scheduled event start (`YYYYMMDD-HHMM` UTC) when distinct from `expiry`. */
+  startsAt?: string
+  /** Deployer venue tag; null for protocol series. */
+  venue?: string | null
 }
 
 const fmtUsd = (n: number) => '$' + n.toLocaleString(undefined, { maximumFractionDigits: 6 })
@@ -36,9 +50,11 @@ export const compactUsd = (n: number) =>
   n >= 1000 ? `$${(n / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : fmtUsd(n)
 
 export function seriesKey(m: ParsedMarket): string {
-  return m.underlying && m.period && m.expiry
-    ? `${m.underlying}:${m.period}:${m.expiry}`
-    : `single:${m.outcomeId}`
+  if (m.kind === 'price' && m.underlying && m.period && m.expiry) {
+    return `${m.underlying}:${m.period}:${m.expiry}`
+  }
+  if (m.questionId != null) return `q:${m.questionId}`
+  return `single:${m.outcomeId}`
 }
 
 export function toSeriesRow(m: ParsedMarket): SeriesRow {
@@ -74,23 +90,55 @@ export function groupBySeries(markets: ParsedMarket[]): Series[] {
     const key = seriesKey(m)
     let s = map.get(key)
     if (!s) {
-      s = { key, underlying: m.underlying, period: m.period, expiry: m.expiry, rows: [], hasBuckets: false }
+      s = {
+        key,
+        underlying: m.underlying,
+        period: m.period,
+        expiry: m.expiry,
+        rows: [],
+        hasBuckets: false,
+        kind: m.kind,
+        category: m.category,
+        subCategory: m.subCategory,
+        startsAt: m.startsAt,
+        venue: m.venue ?? null,
+      }
       map.set(key, s)
     }
     s.rows.push(toSeriesRow(m))
     if (m.class === 'priceBucket') s.hasBuckets = true
+    // A price series mixes a standalone binary with bucket members; the binary
+    // carries the underlying/period the card is titled with.
+    if (!s.underlying && m.underlying) s.underlying = m.underlying
+    if (!s.period && m.period) s.period = m.period
+    if (!s.expiry && m.expiry) s.expiry = m.expiry
+    s.category ??= m.category
+    s.subCategory ??= m.subCategory
+    s.startsAt ??= m.startsAt
   }
-  for (const s of map.values()) s.rows.sort((a, b) => ladderValue(a) - ladderValue(b))
+  // Only price series form a ladder. Question members keep meta order (phase B
+  // sorts them by probability).
+  for (const s of map.values()) {
+    if (s.kind === 'price') s.rows.sort((a, b) => ladderValue(a) - ladderValue(b))
+  }
   return [...map.values()]
 }
 
-/** "Where will BTC settle on 24 Aug, 2:00 PM?" */
+/**
+ * Card / strip title:
+ *  price            → "Where will BTC settle on 24 Aug, 2:00 PM?"
+ *  question members → the question's resolved title
+ *  everything else  → the market's own resolved name
+ */
 export function seriesTitle(s: Series): string {
-  const d = parseExpiry(s.expiry)
-  const when = d
-    ? d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
-        .replace(/\bam\b/i, 'AM').replace(/\bpm\b/i, 'PM')
-    : ''
-  if (!s.underlying) return s.rows[0]?.market.name ?? ''
-  return when ? `Where will ${s.underlying} settle on ${when}?` : `Where will ${s.underlying} settle?`
+  const first = s.rows[0]?.market
+  if (s.kind === 'price' && s.underlying) {
+    const d = parseExpiry(s.expiry)
+    const when = d
+      ? d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+          .replace(/\bam\b/i, 'AM').replace(/\bpm\b/i, 'PM')
+      : ''
+    return when ? `Where will ${s.underlying} settle on ${when}?` : `Where will ${s.underlying} settle?`
+  }
+  return first?.questionName || first?.name || ''
 }
