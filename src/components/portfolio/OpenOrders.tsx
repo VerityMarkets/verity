@@ -3,9 +3,10 @@ import { usePortfolioStore } from '@/stores/portfolioStore'
 import { useMarketStore } from '@/stores/marketStore'
 import { useAgentStore } from '@/stores/agentStore'
 import { useAccount } from 'wagmi'
+import { formatPriceCents } from '@/lib/marketFormat'
 import { parseCoin } from '@/lib/hyperliquid/encoding'
 import { formatMarketName } from '@/components/trading/charts/chartUtils'
-import { signL1Action } from '@/lib/hyperliquid/signing'
+import { signL1Action, nextNonce } from '@/lib/hyperliquid/signing'
 import { postExchange } from '@/lib/hyperliquid/api'
 import { DEV_MODE } from '@/config'
 import { getDevSigner, devWalletInjected } from '@/lib/devWallet'
@@ -13,7 +14,7 @@ import toast from 'react-hot-toast'
 
 export function OpenOrders({ search = '' }: { search?: string }) {
   const openOrders = usePortfolioStore((s) => s.openOrders)
-  const markets = useMarketStore((s) => s.markets)
+  const getMarket = useMarketStore((s) => s.getMarket)
   const { address } = useAccount()
   const getAgentSigner = useAgentStore((s) => s.getAgentSigner)
 
@@ -35,7 +36,7 @@ export function OpenOrders({ search = '' }: { search?: string }) {
         cancels: [{ a: assetId, o: oid }],
       }
 
-      const nonce = Date.now()
+      const nonce = nextNonce()
       const sig = await signL1Action(signer, action, nonce)
 
       await postExchange({ action, nonce, signature: sig })
@@ -48,9 +49,7 @@ export function OpenOrders({ search = '' }: { search?: string }) {
   const filteredOrders = openOrders.filter((order) => {
     if (!search) return true
     const parsed = parseCoin(order.coin)
-    const market = parsed
-      ? markets.find((m) => m.outcomeId === parsed.outcomeId)
-      : null
+    const market = parsed ? getMarket(parsed.outcomeId) : null
     if (!market) return true
     const q = search.toLowerCase()
     const displayName = formatMarketName(market)
@@ -86,9 +85,7 @@ export function OpenOrders({ search = '' }: { search?: string }) {
           <tbody>
             {filteredOrders.map((order) => {
               const parsed = parseCoin(order.coin)
-              const market = parsed
-                ? markets.find((m) => m.outcomeId === parsed.outcomeId)
-                : null
+              const market = parsed ? getMarket(parsed.outcomeId) : null
               const sideName = market && parsed
                 ? market.sideNames[parsed.side] ?? 'Unknown'
                 : parsed ? (parsed.side === 0 ? 'Yes' : 'No') : order.coin
@@ -127,7 +124,7 @@ export function OpenOrders({ search = '' }: { search?: string }) {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right text-sm text-gray-200 font-mono">
-                    {Math.round(parseFloat(order.limitPx) * 100)}¢
+                    {formatPriceCents(parseFloat(order.limitPx))}¢
                   </td>
                   <td className="px-4 py-3 text-right text-sm text-gray-200 font-mono">
                     {parseFloat(order.sz).toFixed(0)}

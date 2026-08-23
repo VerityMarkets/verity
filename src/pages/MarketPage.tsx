@@ -37,9 +37,11 @@ export function MarketPage() {
   const settledInfo = marketId !== null ? getSettledMarket(marketId) : undefined
   const market = activeMarket ?? settledInfo?.market
   const settled = !activeMarket && !!settledInfo
-  const settlementResult = settled
-    ? (parseFloat(settledInfo!.settleFraction) === 1 ? 'yes' : 'no')
-    : null
+  // settleFraction is a decimal string in [0,1]: Yes pays settleFraction,
+  // No pays 1-settleFraction. Protocol markets settle to exactly 0/1; deployer
+  // templates may settle fractionally, so treat ≥0.5 as the Yes side winning.
+  const settleFraction = settled ? parseFloat(settledInfo!.settleFraction) : null
+  const settlementResult = settleFraction === null ? null : (settleFraction >= 0.5 ? 'yes' : 'no')
 
   const isExpired = useMemo(() => {
     if (settled) return true
@@ -144,7 +146,7 @@ export function MarketPage() {
 
     return (
       <div>
-        <MarketHeader market={market} settled settlementResult={settlementResult} />
+        <MarketHeader market={market} settled settlementResult={settlementResult} settleFraction={settleFraction} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
           {/* Left: Chart */}

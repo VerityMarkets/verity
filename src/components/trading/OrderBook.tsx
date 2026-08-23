@@ -1,9 +1,8 @@
 import { useEffect, useMemo } from 'react'
-import { useOrderBookStore, RAW_SF } from '@/stores/orderbookStore'
+import { useOrderBookStore } from '@/stores/orderbookStore'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import {
   useOrderBookUiStore,
-  precisionToNSigFigs,
   precisionToTick,
   defaultPrecision,
   type Precision,
@@ -27,28 +26,34 @@ import {
  * Trailing zeros are preserved at the chosen tick (e.g. "1.0" at 0.1¢ tick).
  */
 function formatCents(priceStr: string, side: 'ask' | 'bid', tickTbp: 1 | 10 | 100): string {
-  const microcent = Math.round(parseFloat(priceStr) * 100_000) // 0.001¢ units
-  const microTick = tickTbp * 10                                // 1¢=1000, 0.1¢=100, 0.01¢=10
   const round = side === 'ask' ? Math.ceil : Math.floor
-  const ticks = round(microcent / microTick)
+  // HL prices carry up to 8 decimals (0.000001¢). Snap to that grid exactly
+  // (float-safe), then quantize to 0.001¢ in the sweep-safe direction — a
+  // plain Math.round here could land the display on the wrong side of the level.
+  const nanocent = Math.round(parseFloat(priceStr) * 100_000_000) // 0.000001¢ units
+  const microcent = round(nanocent / 1000)                         // 0.001¢ units
+  let tick = tickTbp * 10                                          // 1¢=1000, 0.1¢=100, 0.01¢=10
+  let ticks = round(microcent / tick)
 
-  // Bids must never display "0" for a non-zero price. Drop to a 10× finer tick
-  // so adjacent sub-tick bids still aggregate (sweep correctness preserved —
-  // a sell limit at the displayed price clears every bid in the bucket).
-  if (side === 'bid' && ticks === 0 && microcent > 0) {
-    const fineTick = Math.max(1, microTick / 10) // 1¢→0.1¢, 0.1¢→0.01¢, 0.01¢→0.001¢
-    const fineTicks = Math.floor(microcent / fineTick)
-    if (fineTicks > 0) {
-      const cents = (fineTicks * fineTick) / 1000
-      const fineDecimals = fineTick === 100 ? 1 : fineTick === 10 ? 2 : 3
-      return cents.toFixed(fineDecimals)
-    }
-    // Sub-0.001¢ extreme — show actual at HL fineness
-    return (microcent / 1000).toFixed(3)
+  // Never display "0" for a non-zero bid or "100" for a sub-100% ask — both
+  // are invalid limit prices. Step to a 10× finer tick (down to 0.001¢) until
+  // the rounded value lies strictly inside (0, 100). Adjacent sub-tick levels
+  // still aggregate at the finer tick, and sweep correctness is preserved.
+  while (
+    tick > 1 &&
+    ((side === 'bid' && ticks === 0 && nanocent > 0) ||
+      (side === 'ask' && ticks * tick >= 100_000 && nanocent < 100_000_000))
+  ) {
+    tick /= 10
+    ticks = round(microcent / tick)
+  }
+  if (side === 'bid' && ticks === 0 && nanocent > 0) {
+    // Below 0.001¢ — show the exact price (6 decimals of a cent)
+    return (nanocent / 1_000_000).toFixed(6)
   }
 
-  const cents = (ticks * microTick) / 1000
-  const decimals = tickTbp === 100 ? 0 : tickTbp === 10 ? 1 : 2
+  const cents = (ticks * tick) / 1000
+  const decimals = tick === 1000 ? 0 : tick === 100 ? 1 : tick === 10 ? 2 : 3
   return cents.toFixed(decimals)
 }
 
@@ -115,19 +120,14 @@ export function OrderBook({ coin }: { coin: string }) {
       ? storedPrecision
       : undefined
   const precision: Precision = validStored ?? FALLBACK_PRECISION
-  const nSigFigs = precisionToNSigFigs(precision)
 
-  // Pre-loaded slots at all four sig-fig precisions; we read just the two we
-  // need (chosen for display, raw for accurate spread + smart-default seed).
-  // Per-slot granular selectors mean a tick in *another* slot doesn't trigger
-  // a re-render here. Selecting raw twice (when chosen===raw) is harmless —
-  // zustand will return the same reference.
-  const displayBook = useOrderBookStore((s) => s.books[coin]?.[nSigFigs])
-  const rawBook = useOrderBookStore((s) => s.books[coin]?.[RAW_SF])
+  // Single full-precision book per coin (subscribed by MarketPage). All
+  // precision bucketing is client-side below, so switching the dropdown is
+  // instant and never re-subscribes. Granular selector: re-renders only when
+  // this coin's book changes.
+  const rawBook = useOrderBookStore((s) => s.books[coin])
 
-  // Smart-default: pick precision once based on initial book state, then
-  // persist. Reads sf5 (raw) since it's available regardless of which
-  // precision the user ends up choosing.
+  // Smart-default: pick precision once from the initial book, then persist.
   useEffect(() => {
     if (validStored) return
     const ba = parseFloat(rawBook?.asks?.[0]?.px ?? '0') * 100
@@ -135,11 +135,8 @@ export function OrderBook({ coin }: { coin: string }) {
     setPrecision(coin, defaultPrecision(ba))
   }, [validStored, rawBook, coin, setPrecision])
 
-  // Display falls back to raw while the chosen-precision slot is still
-  // loading its first message — keeps rows visible during initial load.
-  const book = displayBook ?? rawBook
-  const bids = book?.bids ?? []
-  const asks = book?.asks ?? []
+  const bids = rawBook?.bids ?? []
+  const asks = rawBook?.asks ?? []
 
   const tickTbp = precisionToTick(precision)
 
@@ -165,10 +162,9 @@ export function OrderBook({ coin }: { coin: string }) {
     const maxAskSz = Math.max(...aggAsks.map((a) => a.size), 1)
     const maxBidSz = Math.max(...aggBids.map((b) => b.size), 1)
 
-    // Spread is read from the RAW (sf5) book so it's accurate regardless of
-    // which display precision the user has selected — no rounding error.
-    const rawBa = parseFloat(rawBook?.asks?.[0]?.px ?? '0')
-    const rawBb = parseFloat(rawBook?.bids?.[0]?.px ?? '0')
+    // Spread from the raw touch — exact regardless of display precision.
+    const rawBa = parseFloat(asks[0]?.px ?? '0')
+    const rawBb = parseFloat(bids[0]?.px ?? '0')
 
     return {
       displayAsks: [...aggAsks].reverse(),
@@ -179,7 +175,7 @@ export function OrderBook({ coin }: { coin: string }) {
     }
     // openOrders ref is stable per portfolio refresh; bids/asks refs change
     // only when this coin's book updates (granular selector above).
-  }, [bids, asks, rawBook, openOrders, coin, tickTbp])
+  }, [bids, asks, openOrders, coin, tickTbp])
 
   return (
     // `overflow-anchor: none` opts the OrderBook out of being the browser's

@@ -29,11 +29,18 @@ export const useTradeStore = create<TradeStore>((set, get) => ({
       { type: 'trades', coin },
       (data) => {
         const newTrades = data as Trade[]
-        if (Array.isArray(newTrades)) {
-          set((state) => ({
-            trades: [...newTrades, ...state.trades].slice(0, 100),
-          }))
-        }
+        if (!Array.isArray(newTrades)) return
+        set((state) => {
+          // HL re-sends the backlog on every (re)subscribe — drop seen trades.
+          const seen = new Set(state.trades.map((t) => t.tid))
+          const fresh = newTrades.filter((t) => t.coin === coin && !seen.has(t.tid))
+          if (fresh.length === 0) return state
+          // The initial backlog (and live multi-fill batches) arrive
+          // oldest-first; the tape is kept newest-first.
+          return {
+            trades: [...fresh, ...state.trades].sort((a, b) => b.time - a.time).slice(0, 100),
+          }
+        })
       }
     )
   },

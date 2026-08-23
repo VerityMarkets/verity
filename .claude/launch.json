@@ -4,8 +4,24 @@
     {
       "name": "verity-dev",
       "runtimeExecutable": "/Users/ravenxce/.nvm/versions/node/v23.6.0/bin/node",
-      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5173"],
+      "runtimeArgs": [
+        "node_modules/vite/bin/vite.js",
+        "--port",
+        "5173"
+      ],
       "port": 5173
+    },
+    {
+      "name": "verity-mainnet",
+      "runtimeExecutable": "/Users/ravenxce/.nvm/versions/node/v23.6.0/bin/node",
+      "runtimeArgs": [
+        "node_modules/vite/bin/vite.js",
+        "--port",
+        "5174",
+        "--mode",
+        "production"
+      ],
+      "port": 5174
     }
   ]
 }

@@ -1,16 +1,39 @@
 import { encode } from '@msgpack/msgpack'
 import { keccak256 } from 'viem'
-import { SIGNING_SOURCE, EIP712_DOMAIN, IS_TESTNET } from '@/config'
+import { SIGNING_SOURCE, EIP712_DOMAIN, SIGNATURE_CHAIN_ID, HYPERLIQUID_CHAIN } from '@/config'
 import type { OrderWire, BuilderFee } from './types'
 
 // --- Float conversion ---
 
+/**
+ * Format a number for the HL wire (mirrors the python SDK's float_to_wire):
+ * max 8 decimals, no exponent notation (Number#toString emits "1e-7" below
+ * 1e-6, which the server rejects), trailing zeros stripped, "-0" → "0".
+ */
 export function floatToWire(x: number): string {
+  if (!Number.isFinite(x)) throw new Error(`Invalid wire float: ${x}`)
   const rounded = parseFloat(x.toFixed(8))
   if (Math.abs(rounded - x) > 1e-12) {
     throw new Error(`Float rounding error too large: ${x}`)
   }
-  return rounded.toString()
+  let s = rounded.toFixed(8)
+  if (s.includes('.')) s = s.replace(/0+$/, '').replace(/\.$/, '')
+  if (s === '-0') s = '0'
+  return s
+}
+
+// --- Nonces ---
+
+let lastNonce = 0
+/**
+ * Strictly increasing per-tab nonce (ms). HL requires every nonce from a
+ * signer to be unique and above the smallest of its 100 most recent nonces;
+ * two actions in the same millisecond with raw Date.now() would collide.
+ */
+export function nextNonce(): number {
+  const now = Date.now()
+  lastNonce = now > lastNonce ? now : lastNonce + 1
+  return lastNonce
 }
 
 // --- Action hash ---
@@ -102,10 +125,12 @@ const APPROVE_BUILDER_FEE_TYPES = {
   ],
 } as const
 
+// chainId must match the wallet's active chain (see config.SIGNATURE_CHAIN_ID)
+// and the `signatureChainId` posted alongside the action.
 const USER_SIGNED_DOMAIN = {
   name: 'HyperliquidSignTransaction',
   version: '1',
-  chainId: 421614, // 0x66eee
+  chainId: SIGNATURE_CHAIN_ID,
   verifyingContract: '0x0000000000000000000000000000000000000000' as `0x${string}`,
 } as const
 
@@ -132,7 +157,7 @@ export async function signApproveBuilderFee(
     types: APPROVE_BUILDER_FEE_TYPES,
     primaryType: 'HyperliquidTransaction:ApproveBuilderFee',
     message: {
-      hyperliquidChain: IS_TESTNET ? 'Testnet' : 'Mainnet',
+      hyperliquidChain: HYPERLIQUID_CHAIN,
       maxFeeRate,
       builder,
       nonce: BigInt(nonce),
@@ -176,7 +201,7 @@ export async function signApproveAgent(
     types: APPROVE_AGENT_TYPES,
     primaryType: 'HyperliquidTransaction:ApproveAgent',
     message: {
-      hyperliquidChain: IS_TESTNET ? 'Testnet' : 'Mainnet',
+      hyperliquidChain: HYPERLIQUID_CHAIN,
       agentAddress,
       agentName,
       nonce: BigInt(nonce),
@@ -221,10 +246,58 @@ export async function signWithdraw3(
     types: WITHDRAW_TYPES,
     primaryType: 'HyperliquidTransaction:Withdraw',
     message: {
-      hyperliquidChain: IS_TESTNET ? 'Testnet' : 'Mainnet',
+      hyperliquidChain: HYPERLIQUID_CHAIN,
       destination,
       amount,
       time: BigInt(nonce),
+    },
+  })
+
+  return splitSignature(signature)
+}
+
+// --- usdClassTransfer (user-signed): move USDC between perps and spot ---
+//
+// Arbitrum bridge deposits credit the *perps* clearinghouse, while HIP-4
+// outcome markets trade against *spot* USDC and withdraw3 debits perps. Users
+// in the separated-balance abstraction modes need this transfer both ways.
+
+const USD_CLASS_TRANSFER_TYPES = {
+  'HyperliquidTransaction:UsdClassTransfer': [
+    { name: 'hyperliquidChain', type: 'string' },
+    { name: 'amount', type: 'string' },
+    { name: 'toPerp', type: 'bool' },
+    { name: 'nonce', type: 'uint64' },
+  ],
+} as const
+
+export async function signUsdClassTransfer(
+  walletClient: {
+    signTypedData: (args: {
+      domain: typeof USER_SIGNED_DOMAIN
+      types: typeof USD_CLASS_TRANSFER_TYPES
+      primaryType: 'HyperliquidTransaction:UsdClassTransfer'
+      message: {
+        hyperliquidChain: string
+        amount: string
+        toPerp: boolean
+        nonce: bigint
+      }
+    }) => Promise<`0x${string}`>
+  },
+  amount: string,
+  toPerp: boolean,
+  nonce: number
+): Promise<{ r: `0x${string}`; s: `0x${string}`; v: number }> {
+  const signature = await walletClient.signTypedData({
+    domain: USER_SIGNED_DOMAIN,
+    types: USD_CLASS_TRANSFER_TYPES,
+    primaryType: 'HyperliquidTransaction:UsdClassTransfer',
+    message: {
+      hyperliquidChain: HYPERLIQUID_CHAIN,
+      amount,
+      toPerp,
+      nonce: BigInt(nonce),
     },
   })
 

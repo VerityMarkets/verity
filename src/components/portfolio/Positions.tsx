@@ -2,11 +2,12 @@ import { Link } from 'react-router-dom'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import { useMarketStore } from '@/stores/marketStore'
 import { parseToken } from '@/lib/hyperliquid/encoding'
-import { formatMarketName } from '@/components/trading/charts/chartUtils'
+import { formatMarketName, formatPriceCents } from '@/lib/marketFormat'
 
 export function Positions({ search = '' }: { search?: string }) {
   const balances = usePortfolioStore((s) => s.balances)
-  const markets = useMarketStore((s) => s.markets)
+  const allOutcomes = useMarketStore((s) => s.allOutcomes)
+  const getSettledMarket = useMarketStore((s) => s.getSettledMarket)
   const mids = useMarketStore((s) => s.mids)
 
   const positions = balances
@@ -15,7 +16,9 @@ export function Positions({ search = '' }: { search?: string }) {
       const parsed = parseToken(b.coin)
       if (!parsed) return null
 
-      const market = markets.find((m) => m.outcomeId === parsed.outcomeId)
+      // Resolve any outcome (incl. multi-outcome question buckets and the
+      // settled cache) so a holding is never silently dropped from the table.
+      const market = allOutcomes.get(parsed.outcomeId) ?? getSettledMarket(parsed.outcomeId)?.market
       if (!market) return null
 
       const sideName = market.sideNames[parsed.side] ?? `Side ${parsed.side}`
@@ -102,10 +105,10 @@ export function Positions({ search = '' }: { search?: string }) {
                     {parseFloat(pos.total).toFixed(0)}
                   </td>
                   <td className="px-4 py-3 text-right text-sm text-gray-400 font-mono">
-                    {Math.round(pos.entryPrice * 100)}¢
+                    {formatPriceCents(pos.entryPrice)}¢
                   </td>
                   <td className="px-4 py-3 text-right text-sm text-gray-200 font-mono">
-                    {Math.round(pos.currentPrice * 100)}¢
+                    {formatPriceCents(pos.currentPrice)}¢
                   </td>
                   <td
                     className={`px-4 py-3 text-right text-sm font-mono font-medium ${

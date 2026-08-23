@@ -23,13 +23,19 @@ export function PortfolioPage() {
   const [depositTab, setDepositTab] = useState<'deposit' | 'withdraw'>('deposit')
 
   const spotBalances = usePortfolioStore((s) => s.spotBalances)
+  const spotAvailable = usePortfolioStore((s) => s.spotAvailable)
   const balances = usePortfolioStore((s) => s.balances)
   const quoteCoin = useMarketStore((s) => s.outcomeQuoteCoin) || 'USDC'
   const mids = useMarketStore((s) => s.mids)
 
+  // Total cash (incl. amounts on hold in resting bids) counts toward portfolio
+  // value; "Available to trade" is net of holds.
   const cashValue =
     (spotBalances['USDC'] ?? 0) +
     (quoteCoin !== 'USDC' ? (spotBalances[quoteCoin] ?? 0) : 0)
+  const availableValue =
+    (spotAvailable['USDC'] ?? 0) +
+    (quoteCoin !== 'USDC' ? (spotAvailable[quoteCoin] ?? 0) : 0)
 
   let portfolioValue = 0
   for (const b of balances) {
@@ -71,7 +77,7 @@ export function PortfolioPage() {
           <div className="text-right">
             <div className="text-sm text-gray-400 mb-1">Available to trade</div>
             <div className="text-lg font-semibold text-gray-100">
-              ${cashValue.toFixed(2)}
+              ${availableValue.toFixed(2)}
             </div>
           </div>
         </div>

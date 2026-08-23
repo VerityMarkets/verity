@@ -15,10 +15,11 @@ export interface ChatGroup {
  */
 export function getChatGroup(market: ParsedMarket): ChatGroup {
   if (market.underlying && market.period) {
-    return {
-      key: `bo:${market.underlying}:${market.period}`,
-      label: `${market.underlying} ${market.period}`,
-    }
+    // priceBucket question outcomes get their own room per bucket index so
+    // they don't collide with the binary on the same underlying/period.
+    const bucket = market.class === 'priceBucket' ? `:b${market.bucketIndex ?? 'x'}` : ''
+    const key = `bo:${market.underlying}:${market.period}${bucket}`
+    return { key, label: chatGroupLabel(key) }
   }
   return {
     key: String(market.outcomeId),
@@ -29,8 +30,8 @@ export function getChatGroup(market: ParsedMarket): ChatGroup {
 /** Parse a chat group key back into a display label. */
 export function chatGroupLabel(key: string): string {
   if (key.startsWith('bo:')) {
-    const [, underlying, period] = key.split(':')
-    return `${underlying} ${period}`
+    const [, underlying, period, bucket] = key.split(':')
+    return `${underlying} ${period}${bucket ? ` bucket ${bucket.slice(1)}` : ''}`
   }
   return `#${key}`
 }
@@ -46,9 +47,13 @@ export function isGroupKey(key: string): boolean {
  */
 export function findMarketForGroup(key: string, markets: ParsedMarket[]): number | null {
   if (!key.startsWith('bo:')) return null
-  const [, underlying, period] = key.split(':')
+  const [, underlying, period, bucket] = key.split(':')
+  const bucketIndex = bucket ? Number(bucket.slice(1)) : undefined
   const matching = markets.filter(
-    (m) => m.underlying === underlying && m.period === period
+    (m) =>
+      m.underlying === underlying &&
+      m.period === period &&
+      (bucketIndex === undefined ? m.class !== 'priceBucket' : m.bucketIndex === bucketIndex)
   )
   if (matching.length === 0) return null
   // Latest expiry first

@@ -8,9 +8,11 @@ interface MarketHeaderProps {
   market: ParsedMarket
   settled?: boolean
   settlementResult?: 'yes' | 'no' | null
+  /** Yes payout per share in [0,1] for settled markets (No pays 1 - fraction) */
+  settleFraction?: number | null
 }
 
-export function MarketHeader({ market, settled, settlementResult }: MarketHeaderProps) {
+export function MarketHeader({ market, settled, settlementResult, settleFraction }: MarketHeaderProps) {
   // Granular selectors — only re-render when *these* coins' mids change, not
   // on every other coin's allMids tick (allMids fires for the full universe).
   const yesMidRaw = useMarketStore((s) => s.mids[market.yesCoin])
@@ -30,14 +32,20 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
   const yesEntry = yesShares > 0 ? parseFloat(yesBalance!.entryNtl) / yesShares : 0
   const noEntry = noShares > 0 ? parseFloat(noBalance!.entryNtl) / noShares : 0
 
-  // For settled markets, show final prices
-  const yesPrice = settled ? (settlementResult === 'yes' ? 1 : 0) : yesMid
-  const noPrice = settled ? (settlementResult === 'no' ? 1 : 0) : noMid
+  // For settled markets, show final payouts
+  const yesPrice = settled
+    ? (settleFraction ?? (settlementResult === 'yes' ? 1 : 0))
+    : yesMid
+  const noPrice = settled
+    ? (settleFraction != null ? 1 - settleFraction : (settlementResult === 'no' ? 1 : 0))
+    : noMid
 
   const yesPct = formatPriceCents(yesPrice)
   const noPct = formatPriceCents(noPrice)
 
-  const isRecurring = market.class === 'priceBinary'
+  const isBinary = market.class === 'priceBinary'
+  const isBucket = market.class === 'priceBucket'
+  const isRecurring = isBinary || isBucket
 
   // Green/red split bar
 
@@ -64,7 +72,9 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
           <h1 className="text-lg font-bold text-gray-100">
             {isRecurring ? (
               <>
-                {market.underlying} above ${market.targetPrice.toLocaleString()}
+                {isBinary
+                  ? `${market.underlying} above $${market.targetPrice.toLocaleString()}`
+                  : market.name}
                 {market.expiry && (
                   <span className="text-gray-400 font-normal">
                     {' '}on {formatExpiryWithTimezone(market.expiry)}?
@@ -85,7 +95,7 @@ export function MarketHeader({ market, settled, settlementResult }: MarketHeader
                 rel="noopener noreferrer"
                 className="text-[10px] text-amber-400/70 hover:text-amber-400 transition-colors"
               >
-                HL Mainnet {market.underlying} Spot
+                HL {market.underlying} perp mark price
                 <svg className="w-2.5 h-2.5 inline ml-0.5 -mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>

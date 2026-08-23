@@ -3,6 +3,8 @@ interface ChartHeaderProps {
   targetPrice: number
   currentPrice: number
   settlementPrice?: number
+  /** Overrides the "Price to beat" block (e.g. bucket range "$75,882 – $78,979"). */
+  targetLabel?: string
 }
 
 /** Format a number to at least 3 significant figures */
@@ -13,22 +15,30 @@ function formatSF(value: number, minSF = 3): string {
   return value.toFixed(decimals)
 }
 
-export function ChartHeader({ targetPrice, currentPrice, settlementPrice }: ChartHeaderProps) {
+export function ChartHeader({ targetPrice, currentPrice, settlementPrice, targetLabel }: ChartHeaderProps) {
   const priceToShow = settlementPrice ?? currentPrice
   const delta = priceToShow - targetPrice
   const isAbove = delta >= 0
   const absDelta = Math.abs(delta)
   const pctDelta = targetPrice > 0 ? (absDelta / targetPrice) * 100 : 0
+  const hasTarget = targetPrice > 0
+  const showTarget = !!targetLabel || hasTarget
 
   return (
     <div className="flex items-center gap-6">
-      <div>
-        <div className="text-[10px] text-gray-500 uppercase tracking-wide">Price to beat</div>
-        <div className="text-lg font-bold text-gray-100">
-          ${targetPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </div>
-      </div>
-      <div className="w-px h-8 bg-white/10" />
+      {showTarget && (
+        <>
+          <div>
+            <div className="text-[10px] text-gray-500 uppercase tracking-wide">
+              {targetLabel ? 'Range' : 'Price to beat'}
+            </div>
+            <div className="text-lg font-bold text-gray-100">
+              {targetLabel ?? `$${targetPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            </div>
+          </div>
+          <div className="w-px h-8 bg-white/10" />
+        </>
+      )}
       <div>
         <div className={`text-[10px] uppercase tracking-wide ${settlementPrice !== undefined ? 'text-amber-400' : 'text-gray-500'}`}>
           {settlementPrice !== undefined ? 'Settlement price' : 'Current price'}
@@ -37,7 +47,7 @@ export function ChartHeader({ targetPrice, currentPrice, settlementPrice }: Char
           <span className={`text-lg font-bold ${settlementPrice !== undefined ? 'text-amber-400' : 'text-gray-100'}`}>
             ${priceToShow.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
-          {settlementPrice === undefined && priceToShow > 0 && (
+          {settlementPrice === undefined && priceToShow > 0 && hasTarget && (
             <span className={`text-xs font-semibold ${isAbove ? 'text-yes' : 'text-no'}`}>
               {isAbove ? '\u25B2' : '\u25BC'} ${formatSF(absDelta)} ({pctDelta.toFixed(2)}%)
             </span>

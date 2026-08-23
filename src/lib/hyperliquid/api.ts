@@ -7,6 +7,9 @@ import type {
   SpotClearinghouseState,
   OpenOrder,
   Fill,
+  Trade,
+  ClearinghouseState,
+  AbstractionMode,
 } from './types'
 
 async function postInfo<T>(body: Record<string, unknown>): Promise<T> {
@@ -111,6 +114,23 @@ export function fetchUserFillsByTime(
   return postInfo<Fill[]>(req)
 }
 
-export function fetchSettledOutcome(outcome: number): Promise<SettledOutcome> {
-  return postInfo<SettledOutcome>({ type: 'settledOutcome', outcome })
+/** Returns `null` for outcomes that have not settled yet (verified live). */
+export function fetchSettledOutcome(outcome: number): Promise<SettledOutcome | null> {
+  return postInfo<SettledOutcome | null>({ type: 'settledOutcome', outcome })
+}
+
+export function fetchRecentTrades(coin: string): Promise<Trade[]> {
+  return postInfo<Trade[]>({ type: 'recentTrades', coin })
+}
+
+/** Perps clearinghouse state — bridge deposits land here, withdraw3 debits here. */
+export function fetchClearinghouseState(user: string): Promise<ClearinghouseState> {
+  return postInfo<ClearinghouseState>({ type: 'clearinghouseState', user })
+}
+
+/** Account abstraction mode. In 'unifiedAccount' / 'portfolioMargin' spot and
+ *  perps USDC are one balance; otherwise they are separate and need
+ *  usdClassTransfer to move between them. */
+export function fetchUserAbstraction(user: string): Promise<AbstractionMode> {
+  return postInfo<AbstractionMode>({ type: 'userAbstraction', user })
 }

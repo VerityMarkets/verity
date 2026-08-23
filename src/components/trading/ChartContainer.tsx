@@ -21,6 +21,18 @@ interface ChartContainerProps {
   settlementResult?: 'yes' | 'no' | null
 }
 
+const fmtUsd = (n: number) => '$' + n.toLocaleString(undefined, { maximumFractionDigits: 2 })
+/** "$75,882 – $78,979" style label for priceBucket outcomes; undefined otherwise. */
+function bucketRangeLabel(m: ParsedMarket): string | undefined {
+  if (m.class !== 'priceBucket' || !m.priceThresholds?.length || m.bucketIndex == null) return undefined
+  const t = m.priceThresholds
+  const i = m.bucketIndex
+  if (i < 0) return 'none of the above'
+  if (i === 0) return `below ${fmtUsd(t[0])}`
+  if (i >= t.length) return `above ${fmtUsd(t[t.length - 1])}`
+  return `${fmtUsd(t[i - 1])} – ${fmtUsd(t[i])}`
+}
+
 export function ChartContainer({ market, settled, settlementPrice, settlementResult }: ChartContainerProps) {
   const mid = useMainnetMid(market.underlying)
   const tradeSide = useMarketStore((s) => s.tradeSide)
@@ -74,6 +86,7 @@ export function ChartContainer({ market, settled, settlementPrice, settlementRes
           <ChartHeader
             underlying={market.underlying}
             targetPrice={market.targetPrice}
+            targetLabel={bucketRangeLabel(market)}
             currentPrice={currentPrice}
             settlementPrice={settlementPrice}
           />

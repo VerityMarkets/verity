@@ -4,13 +4,13 @@ import toast from 'react-hot-toast'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
 import { useMarketStore } from '@/stores/marketStore'
 import { usePortfolioStore } from '@/stores/portfolioStore'
-import { useOrderBookStore, RAW_SF } from '@/stores/orderbookStore'
+import { useOrderBookStore } from '@/stores/orderbookStore'
 import { useAgentStore } from '@/stores/agentStore'
-import { orderToWire, buildOrderAction, signL1Action } from '@/lib/hyperliquid/signing'
+import { orderToWire, buildOrderAction, signL1Action, nextNonce } from '@/lib/hyperliquid/signing'
 import { postExchange } from '@/lib/hyperliquid/api'
 import { BUILDER_ADDRESS, BUILDER_FEE, DEV_MODE, IS_TESTNET } from '@/config'
 import { getDevSigner, devWalletInjected } from '@/lib/devWallet'
-import { formatFillCents, formatPriceCents } from '@/lib/marketFormat'
+import { formatFillCents, formatPriceCents, centsToWirePrice } from '@/lib/marketFormat'
 
 type OrderType = 'buy' | 'sell'
 
@@ -40,7 +40,7 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
   const outcomeQuoteCoin = useMarketStore((s) => s.outcomeQuoteCoin)
   const side = useMarketStore((s) => s.tradeSide)
   const setTradeSide = useMarketStore((s) => s.setTradeSide)
-  const getBalance = usePortfolioStore((s) => s.getBalance)
+  const getAvailable = usePortfolioStore((s) => s.getAvailable)
   const balances = usePortfolioStore((s) => s.balances)
 
   // Agent wallet
@@ -70,7 +70,7 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
     setShares(String(posShares))
     // Set price from best bid (same logic as clicking the side button in sell mode)
     const coin = posSide === 'yes' ? market.yesCoin : market.noCoin
-    const book = useOrderBookStore.getState().books[coin]?.[RAW_SF]
+    const book = useOrderBookStore.getState().books[coin]
     const bestBid = book?.bids?.length ? parseFloat(book.bids[0].px) : 0
     const mid = useMarketStore.getState().mids[coin]
     const midPrice = mid ? parseFloat(mid) : 0.5
@@ -106,14 +106,13 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
     return () => window.removeEventListener('verity:set-limit-price', handleSetLimit)
   }, [handleSetLimit])
 
-  // Subscribe per-coin to the RAW (sf5, full precision) book so fill prices
-  // are derived from un-aggregated best-bid/ask. Only re-renders when this
-  // market's raw slot changes.
-  const yesBook = useOrderBookStore((s) => s.books[market.yesCoin]?.[RAW_SF])
-  const noBook = useOrderBookStore((s) => s.books[market.noCoin]?.[RAW_SF])
+  // Per-coin full-precision books so fill prices come from the real touch.
+  // Granular selectors: only re-render when this market's books change.
+  const yesBook = useOrderBookStore((s) => s.books[market.yesCoin])
+  const noBook = useOrderBookStore((s) => s.books[market.noCoin])
 
-  // Quote balance from dynamic coin
-  const quoteBalance = getBalance(outcomeQuoteCoin)
+  // Quote balance available to trade (net of amounts on hold in resting bids)
+  const quoteAvailable = getAvailable(outcomeQuoteCoin)
 
   // Mid prices from allMids (reactive via mids subscription)
   const yesMid = yesMidRaw ? parseFloat(yesMidRaw) : 0.5
@@ -144,38 +143,51 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
   const priceCents = price ? parseFloat(price) : parseFloat(midPriceStr)
   const priceDecimal = priceCents / 100
 
-  // Shares → derived values
-  const shareCount = shares ? parseFloat(shares) : 0
+  // Shares → derived values (outcome tokens have integer sizes)
+  const shareCount = shares ? Math.floor(parseFloat(shares)) || 0 : 0
   const total = priceDecimal * shareCount
   const toWin = shareCount // Each share pays $1 if correct
   const multiplier = priceDecimal > 0 ? 1 / priceDecimal : 0
-  // HL evaluates minimum order value using best bid (buy) / best ask (sell), fallback to mid
-  const hlBid = side === 'yes' ? yesBestBid : noBestBid
-  const hlAsk = side === 'yes' ? yesBestAsk : noBestAsk
-  const hlMid = side === 'yes' ? yesMid : noMid
-  const hlRefPrice = orderType === 'buy'
-    ? (hlBid > 0 ? hlBid : hlMid)
-    : (hlAsk > 0 ? hlAsk : hlMid)
-  const minShares = hlRefPrice > 0 ? Math.ceil(MIN_ORDER_VALUE / hlRefPrice) : 0
-  const belowMin = shareCount > 0 && hlRefPrice > 0 && hlRefPrice * shareCount < MIN_ORDER_VALUE
 
   const assetId = side === 'yes' ? market.yesAssetId : market.noAssetId
 
-  // Position for sell max
+  // Position for sell max — `total` includes shares on hold in resting asks
   const posCoin = '+' + (side === 'yes' ? market.yesCoin : market.noCoin).slice(1)
   const posBalance = balances.find((b) => b.coin === posCoin)
   const positionShares = posBalance ? parseFloat(posBalance.total) : 0
+  const positionAvailable = posBalance
+    ? Math.max(0, parseFloat(posBalance.total) - (parseFloat(posBalance.hold) || 0))
+    : 0
+
+  // HL enforces the 10-quote minimum on the order's own limit notional
+  // (px × sz). The one exception observed on mainnet: a sell that closes the
+  // entire balance is accepted below the minimum.
+  const closesWholePosition = orderType === 'sell' && positionShares > 0 && shareCount >= Math.floor(positionShares)
+  const minShares = priceDecimal > 0 ? Math.ceil(MIN_ORDER_VALUE / priceDecimal) : 0
+  const belowMin =
+    shareCount > 0 && priceDecimal > 0 && priceDecimal * shareCount < MIN_ORDER_VALUE && !closesWholePosition
 
   const hasRealBuilder =
     (BUILDER_ADDRESS as string) !== '0x0000000000000000000000000000000000000000'
   const tradingEnabled = !!agentKey
   const needsBuilderFeeApproval = tradingEnabled && hasRealBuilder && !builderFeeApproved
 
+  function stepPriceDown() {
+    const cur = priceCents || 1
+    const step = cur > 1 ? 1 : cur > 0.1 ? 0.1 : cur > 0.01 ? 0.01 : 0.001
+    setPrice(String(Math.max(0.001, parseFloat((cur - step).toFixed(3)))))
+  }
+  function stepPriceUp() {
+    const cur = priceCents || 0
+    const step = cur >= 1 ? 1 : cur >= 0.1 ? 0.1 : cur >= 0.01 ? 0.01 : 0.001
+    setPrice(String(Math.min(99.999, parseFloat((cur + step).toFixed(3)))))
+  }
+
   function handleMax() {
-    if (orderType === 'buy' && quoteBalance > 0 && priceDecimal > 0) {
-      setShares(String(Math.floor(quoteBalance / priceDecimal)))
-    } else if (orderType === 'sell' && positionShares > 0) {
-      setShares(String(Math.floor(positionShares)))
+    if (orderType === 'buy' && quoteAvailable > 0 && priceDecimal > 0) {
+      setShares(String(Math.floor(quoteAvailable / priceDecimal)))
+    } else if (orderType === 'sell' && positionAvailable > 0) {
+      setShares(String(Math.floor(positionAvailable)))
     }
   }
 
@@ -219,17 +231,27 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
       toast.error('Enter price and shares')
       return
     }
+    // Decimal-exact cents → wire price, validated against HL price rules
+    const wire = centsToWirePrice(price || midPriceStr)
+    if ('error' in wire) {
+      toast.error(wire.error)
+      return
+    }
+    if (belowMin) {
+      toast.error(`Order must be worth at least ${MIN_ORDER_VALUE} ${outcomeQuoteCoin}`)
+      return
+    }
 
     setSubmitting(true)
     try {
       const isBuy = orderType === 'buy'
-      const order = orderToWire(assetId, isBuy, priceDecimal, shareCount)
+      const order = orderToWire(assetId, isBuy, parseFloat(wire.px), shareCount)
       const action = buildOrderAction(
         [order],
         hasRealBuilder ? { b: BUILDER_ADDRESS.toLowerCase(), f: BUILDER_FEE } : undefined,
       )
 
-      const nonce = Date.now()
+      const nonce = nextNonce()
       const sig = await signL1Action(signer, action, nonce)
 
       const result = await postExchange({
@@ -331,7 +353,7 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-3">
+      <form onSubmit={handleSubmit} noValidate className="space-y-3">
         {/* Price input — supports decimal cents (e.g. 0.5, 99.99) for sub-cent
             and near-edge HIP-4 markets. +/- step adapts to current magnitude. */}
         <div>
@@ -339,12 +361,7 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
           <div className="relative flex items-center">
             <button
               type="button"
-              onClick={() => {
-                const cur = priceCents || 1
-                const step = cur > 1 ? 1 : cur > 0.1 ? 0.1 : 0.01
-                const next = Math.max(0.01, parseFloat((cur - step).toFixed(2)))
-                setPrice(String(next))
-              }}
+              onClick={stepPriceDown}
               className="absolute left-2 w-6 h-6 flex items-center justify-center rounded bg-surface-3 text-gray-400 hover:text-gray-200 text-sm font-bold z-10"
             >
               −
@@ -353,23 +370,23 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
               type="number"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
+              onKeyDown={(e) => {
+                // Route native arrow stepping through the magnitude-aware steppers
+                if (e.key === 'ArrowUp') { e.preventDefault(); stepPriceUp() }
+                else if (e.key === 'ArrowDown') { e.preventDefault(); stepPriceDown() }
+              }}
               placeholder="0"
               className="input w-full text-center px-10"
-              min="0.01"
-              max="100"
-              step="0.01"
+              min="0.000001"
+              max="99.999"
+              step="any"
             />
             <span className="absolute right-10 top-1/2 -translate-y-1/2 text-xs text-gray-500">
               ¢
             </span>
             <button
               type="button"
-              onClick={() => {
-                const cur = priceCents || 0
-                const step = cur >= 1 ? 1 : cur >= 0.1 ? 0.1 : 0.01
-                const next = Math.min(100, parseFloat((cur + step).toFixed(2)))
-                setPrice(String(next))
-              }}
+              onClick={stepPriceUp}
               className="absolute right-2 w-6 h-6 flex items-center justify-center rounded bg-surface-3 text-gray-400 hover:text-gray-200 text-sm font-bold z-10"
             >
               +
@@ -385,9 +402,9 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
               {isConnected && (
                 <span className="text-xs text-gray-500">
                   {orderType === 'buy'
-                    ? `${quoteBalance.toFixed(2)} ${outcomeQuoteCoin}`
+                    ? `${quoteAvailable.toFixed(2)} ${outcomeQuoteCoin}`
                     : positionShares > 0
-                      ? `${positionShares.toFixed(1)} shares`
+                      ? `${positionAvailable.toFixed(0)} shares`
                       : '0 shares'}
                 </span>
               )}

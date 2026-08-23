@@ -9,6 +9,8 @@ export interface Outcome {
   name: string
   description: string
   sideSpecs: SideSpec[]
+  /** Quote token symbol — 'USDC' on mainnet, 'USDH' on (legacy) testnet outcomes. */
+  quoteToken?: string
 }
 
 export interface Question {
@@ -23,12 +25,20 @@ export interface Question {
 export interface OutcomeMeta {
   outcomes: Outcome[]
   questions: Question[]
+  /** Non-protocol deployers (permissionless templates; empty on mainnet today). */
+  deployers?: unknown[]
+  /** Protocol fee scale for outcome markets, e.g. "1.0". */
+  feeScale?: string
 }
 
 export interface SettledOutcome {
   spec: Outcome
+  /** Decimal string in [0,1]: Yes pays settleFraction, No pays 1-settleFraction. */
   settleFraction: string
+  /** e.g. "price:79.3301" */
   details: string
+  /** Present only for named outcomes of a multi-outcome question. */
+  question?: { question: { settled: number }; name: string; description: string }
 }
 
 // --- Parsed market info ---
@@ -47,6 +57,14 @@ export interface ParsedMarket {
   noCoin: string
   yesAssetId: number
   noAssetId: number
+  /** Quote token this outcome settles in (from outcomeMeta). */
+  quoteToken: string
+  /** Set when the outcome belongs to a multi-outcome question (priceBucket etc.). */
+  questionId?: number
+  /** Bucket index within the question (named outcomes), or -1 for the fallback. */
+  bucketIndex?: number
+  /** Price thresholds for priceBucket questions. */
+  priceThresholds?: number[]
 }
 
 // --- Spot Meta ---
@@ -88,6 +106,8 @@ export interface L2Book {
   coin: string
   levels: [L2Level[], L2Level[]]
   time: number
+  /** Only present when the request carried nSigFigs. */
+  spread?: string
 }
 
 // --- Trades ---
@@ -122,7 +142,10 @@ export interface Candle {
 
 export interface SpotBalance {
   coin: string
+  /** Spot token index — absent on outcome ('+') balances. */
+  token?: number
   total: string
+  /** Amount locked by resting orders; available = total - hold. */
   hold: string
   entryNtl: string
 }
@@ -130,6 +153,19 @@ export interface SpotBalance {
 export interface SpotClearinghouseState {
   balances: SpotBalance[]
 }
+
+/** Perps clearinghouse (subset). Bridge deposits credit this balance. */
+export interface ClearinghouseState {
+  withdrawable: string
+  marginSummary: { accountValue: string; totalMarginUsed: string }
+}
+
+export type AbstractionMode =
+  | 'unifiedAccount'
+  | 'portfolioMargin'
+  | 'disabled'
+  | 'default'
+  | 'dexAbstraction'
 
 // --- Orders ---
 
@@ -140,6 +176,7 @@ export interface OpenOrder {
   side: 'B' | 'A'
   sz: string
   timestamp: number
+  origSz?: string
 }
 
 // --- Fills ---
@@ -159,6 +196,8 @@ export interface Fill {
   fee: string
   tid: number
   feeToken: string
+  /** Present when a builder fee was charged (already included in `fee`). */
+  builderFee?: string
   twapId: number | null
 }
 
@@ -210,11 +249,16 @@ export interface WsSubscription {
   coin?: string
   user?: string
   interval?: string
-  isPortfolioMargin?: boolean
+  /** For `spotState` — current server param name (the old `isPortfolioMargin` is echoed as this). */
+  ignorePortfolioMargin?: boolean
   /** For `l2Book` — server-side aggregation by significant figures (2–5). */
   nSigFigs?: number
   /** For `l2Book` with `nSigFigs` set — finer-grained mantissa adjustment. */
   mantissa?: number
+  /** For `userFills` — merge partial fills of one crossing order (matches REST userFillsByTime). */
+  aggregateByTime?: boolean
+  /** For `openOrders` — perp dex name; '' = default dex (includes spot + outcome orders). */
+  dex?: string
 }
 
 export interface WsMessage {

@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import { useMarketStore } from '@/stores/marketStore'
+import { formatPriceCents } from '@/lib/marketFormat'
 import { parseCoin } from '@/lib/hyperliquid/encoding'
 import { formatMarketName } from '@/components/trading/charts/chartUtils'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -41,7 +42,7 @@ export function TradeHistory({ search = '' }: { search?: string }) {
   const loadMoreFills = usePortfolioStore((s) => s.loadMoreFills)
   const loadingMore = usePortfolioStore((s) => s.loadingMore)
   const hasMoreFills = usePortfolioStore((s) => s.hasMoreFills)
-  const markets = useMarketStore((s) => s.markets)
+  const allOutcomes = useMarketStore((s) => s.allOutcomes)
   const getSettledMarket = useMarketStore((s) => s.getSettledMarket)
   const fetchSettledMarket = useMarketStore((s) => s.fetchSettledMarket)
   const quoteCoin = useMarketStore((s) => s.outcomeQuoteCoin) || 'USDC'
@@ -53,11 +54,10 @@ export function TradeHistory({ search = '' }: { search?: string }) {
       if (fill.coin.startsWith('@')) continue
       const parsed = parseCoin(fill.coin)
       if (!parsed) continue
-      const inActive = markets.some((m) => m.outcomeId === parsed.outcomeId)
-      if (!inActive) ids.add(parsed.outcomeId)
+      if (!allOutcomes.has(parsed.outcomeId)) ids.add(parsed.outcomeId)
     }
     return ids
-  }, [fills, markets])
+  }, [fills, allOutcomes])
 
   useEffect(() => {
     for (const id of missingOutcomeIds) {
@@ -67,7 +67,7 @@ export function TradeHistory({ search = '' }: { search?: string }) {
 
   // Helper: resolve market from active or settled cache
   function resolveMarket(outcomeId: number): ParsedMarket | undefined {
-    return markets.find((m) => m.outcomeId === outcomeId) ?? getSettledMarket(outcomeId)?.market
+    return allOutcomes.get(outcomeId) ?? getSettledMarket(outcomeId)?.market
   }
 
   const filteredFills = fills.filter((fill) => {
@@ -187,7 +187,7 @@ export function TradeHistory({ search = '' }: { search?: string }) {
                   <td className="px-4 py-3 text-right text-sm text-gray-200 font-mono">
                     {isSwap
                       ? `$${parseFloat(fill.px).toFixed(4)}`
-                      : `${Math.round(parseFloat(fill.px) * 100)}¢`}
+                      : `${formatPriceCents(parseFloat(fill.px))}¢`}
                   </td>
 
                   {/* Size */}

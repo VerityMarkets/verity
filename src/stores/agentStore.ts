@@ -1,9 +1,9 @@
 import { create } from 'zustand'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import type { Hex } from 'viem'
-import { signApproveAgent, signApproveBuilderFee } from '@/lib/hyperliquid/signing'
+import { signApproveAgent, signApproveBuilderFee, nextNonce } from '@/lib/hyperliquid/signing'
 import { postExchange, fetchMaxBuilderFee, fetchExtraAgents } from '@/lib/hyperliquid/api'
-import { BUILDER_ADDRESS, BUILDER_FEE, IS_TESTNET } from '@/config'
+import { BUILDER_ADDRESS, BUILDER_FEE, IS_TESTNET, SIGNATURE_CHAIN_ID_HEX, HYPERLIQUID_CHAIN } from '@/config'
 
 // ---------------------------------------------------------------------------
 // localStorage keys (scoped per network + wallet address)
@@ -172,7 +172,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       const agentAddr = agentAccount.address
 
       // 2. Approve agent on-chain
-      const agentNonce = Date.now()
+      const agentNonce = nextNonce()
       const agentName = 'Verity Webapp'
       const agentSig = await signApproveAgent(
         walletClient,
@@ -184,8 +184,8 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       await postExchange({
         action: {
           type: 'approveAgent',
-          hyperliquidChain: IS_TESTNET ? 'Testnet' : 'Mainnet',
-          signatureChainId: '0x66eee',
+          hyperliquidChain: HYPERLIQUID_CHAIN,
+          signatureChainId: SIGNATURE_CHAIN_ID_HEX,
           agentAddress: agentAddr,
           agentName,
           nonce: agentNonce,
@@ -236,7 +236,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
         return
       }
 
-      const feeNonce = Date.now()
+      const feeNonce = nextNonce()
       const feeSig = await signApproveBuilderFee(
         walletClient,
         BUILDER_ADDRESS as `0x${string}`,
@@ -247,8 +247,8 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       await postExchange({
         action: {
           type: 'approveBuilderFee',
-          hyperliquidChain: IS_TESTNET ? 'Testnet' : 'Mainnet',
-          signatureChainId: '0x66eee',
+          hyperliquidChain: HYPERLIQUID_CHAIN,
+          signatureChainId: SIGNATURE_CHAIN_ID_HEX,
           maxFeeRate: '0.1%',
           builder: BUILDER_ADDRESS,
           nonce: feeNonce,

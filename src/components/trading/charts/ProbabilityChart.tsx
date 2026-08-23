@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createChart, AreaSeries } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts'
-import { fetchCandles } from '@/lib/hyperliquid/api'
+import { fetchCandles, fetchRecentTrades } from '@/lib/hyperliquid/api'
 import { useMarketStore } from '@/stores/marketStore'
-import { useTradeStore } from '@/stores/tradeStore'
 import { formatPriceCents } from '@/lib/marketFormat'
 import { getBaseChartOptions, toLocalChartTime } from './chartUtils'
 
@@ -15,17 +14,10 @@ export function ProbabilityChart({ coin }: { coin: string }) {
   const mid = useMarketStore((s) => s.mids[coin])
 
   // Backfill mode: 'candles' (loaded from HL candleSnapshot) | 'trades' (loaded
-  // from live trades stream) | 'pending' (waiting on candle fetch).
+  // from REST recentTrades) | 'pending' (waiting on candle fetch).
+  // The REST path is used instead of the shared tradeStore, which holds a
+  // single coin that RecentTrades re-targets when the user flips Yes/No.
   const [backfillMode, setBackfillMode] = useState<'pending' | 'candles' | 'trades'>('pending')
-  const trades = useTradeStore((s) => s.trades)
-  const subscribeTrades = useTradeStore((s) => s.subscribeTrades)
-
-  // Ensure trades stream is live so the fallback path has data even when the
-  // user is on the Book tab (RecentTrades isn't mounted). subscribeTrades is
-  // idempotent for the same coin.
-  useEffect(() => {
-    subscribeTrades(coin)
-  }, [coin, subscribeTrades])
 
   // Create chart and try candleSnapshot backfill
   useEffect(() => {
@@ -72,9 +64,9 @@ export function ProbabilityChart({ coin }: { coin: string }) {
         chart.timeScale().fitContent()
         lastTimeRef.current = data[data.length - 1].time as number
         setBackfillMode('candles')
-        console.log(
-          `[ProbabilityChart] Loaded ${data.length} candles for ${coin} (1m, 24h)`,
-        )
+        if (import.meta.env.DEV) {
+          console.log(`[ProbabilityChart] Loaded ${data.length} candles for ${coin} (1m, 24h)`)
+        }
       })
       .catch((err) => {
         console.error(
@@ -98,38 +90,36 @@ export function ProbabilityChart({ coin }: { coin: string }) {
     }
   }, [coin])
 
-  // Trade-stream fallback: when candleSnapshot was empty/errored, hydrate from
-  // the trades store (which receives a recent-trades snapshot on subscribe).
+  // Trade fallback: when candleSnapshot was empty/errored, hydrate from the
+  // REST recentTrades snapshot (ascending time order), bucketed to 1-minute
+  // resolution to match the candle grid + the live-update bucket.
   useEffect(() => {
     if (backfillMode !== 'trades') return
-    if (!seriesRef.current || !chartRef.current) return
-    const filtered = trades.filter((t) => t.coin === coin)
-    if (filtered.length === 0) return
-
-    // Trades arrive newest-first; sort ascending and bucket to 1-minute
-    // resolution (matches the candle backfill grid + the live-update bucket).
-    // Within each minute we keep the latest trade's price.
-    const sorted = [...filtered].sort((a, b) => a.time - b.time)
-    const buckets = new Map<number, number>() // minuteSec → latest price
-    for (const t of sorted) {
-      const minute = Math.floor(toLocalChartTime(t.time) / 60) * 60
-      buckets.set(minute, parseFloat(t.px))
-    }
-    const data: { time: Time; value: number }[] = Array.from(buckets.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([time, value]) => ({ time: time as Time, value }))
-    if (data.length === 0) return
-
-    seriesRef.current.setData(data)
-    chartRef.current.timeScale().fitContent()
-    lastTimeRef.current = data[data.length - 1].time as number
-    console.log(
-      `[ProbabilityChart] Backfilled ${data.length} points from trades stream for ${coin}`,
-    )
-    // Done — switch back to passive mode so further trade arrivals go through
-    // the live mid path (avoids re-running setData on every store change).
-    setBackfillMode('candles')
-  }, [backfillMode, trades, coin])
+    let cancelled = false
+    fetchRecentTrades(coin)
+      .then((trades) => {
+        if (cancelled || !seriesRef.current || !chartRef.current) return
+        const sorted = trades.filter((t) => t.coin === coin).sort((a, b) => a.time - b.time)
+        const buckets = new Map<number, number>() // minuteSec → latest price
+        for (const t of sorted) {
+          const minute = Math.floor(toLocalChartTime(t.time) / 60) * 60
+          buckets.set(minute, parseFloat(t.px))
+        }
+        const data: { time: Time; value: number }[] = Array.from(buckets.entries())
+          .sort(([a], [b]) => a - b)
+          .map(([time, value]) => ({ time: time as Time, value }))
+        if (data.length === 0) return
+        seriesRef.current.setData(data)
+        chartRef.current.timeScale().fitContent()
+        lastTimeRef.current = data[data.length - 1].time as number
+        if (import.meta.env.DEV) {
+          console.log(`[ProbabilityChart] Backfilled ${data.length} points from recentTrades for ${coin}`)
+        }
+      })
+      .catch(() => { /* live mids will fill in */ })
+      .finally(() => { if (!cancelled) setBackfillMode('candles') })
+    return () => { cancelled = true }
+  }, [backfillMode, coin])
 
   // Real-time updates from allMids — bucketed to 1-minute boundaries so live
   // ticks align with the candle backfill grid. Within a minute we overwrite

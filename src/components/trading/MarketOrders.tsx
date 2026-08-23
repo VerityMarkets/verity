@@ -2,11 +2,12 @@ import { usePortfolioStore } from '@/stores/portfolioStore'
 import { useAgentStore } from '@/stores/agentStore'
 import { useAccount } from 'wagmi'
 import { parseCoin } from '@/lib/hyperliquid/encoding'
-import { signL1Action } from '@/lib/hyperliquid/signing'
+import { signL1Action, nextNonce } from '@/lib/hyperliquid/signing'
 import { postExchange } from '@/lib/hyperliquid/api'
 import { DEV_MODE } from '@/config'
 import { getDevSigner, devWalletInjected } from '@/lib/devWallet'
 import toast from 'react-hot-toast'
+import { formatPriceCents } from '@/lib/marketFormat'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
 
 interface MarketOrdersProps {
@@ -43,7 +44,7 @@ export function MarketOrders({ market }: MarketOrdersProps) {
         type: 'cancel' as const,
         cancels: [{ a: assetId, o: oid }],
       }
-      const nonce = Date.now()
+      const nonce = nextNonce()
       const sig = await signL1Action(signer, action, nonce)
       await postExchange({ action, nonce, signature: sig })
       toast.success('Order cancelled')
@@ -63,7 +64,7 @@ export function MarketOrders({ market }: MarketOrdersProps) {
           const parsed = parseCoin(order.coin)!
           const sideName = market.sideNames[parsed.side] ?? (parsed.side === 0 ? 'Yes' : 'No')
           const isBuy = order.side === 'B'
-          const price = Math.round(parseFloat(order.limitPx) * 100)
+          const price = formatPriceCents(parseFloat(order.limitPx))
           const size = parseFloat(order.sz).toFixed(0)
 
           return (

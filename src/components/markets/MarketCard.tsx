@@ -1,15 +1,19 @@
 import { Link } from 'react-router-dom'
 import { useMarketStore } from '@/stores/marketStore'
-import { formatMarketName } from '@/lib/marketFormat'
+import { formatMarketName, formatPriceCents } from '@/lib/marketFormat'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
 import { MarketTimer } from './MarketTimer'
 
 export function MarketCard({ market }: { market: ParsedMarket }) {
-  const getYesPrice = useMarketStore((s) => s.getYesPrice)
-  const yesPrice = getYesPrice(market)
+  // Subscribe to this market's own mid so the card re-renders on every tick
+  // (selecting the stable getYesPrice function never triggered a re-render).
+  const yesMidRaw = useMarketStore((s) => s.mids[market.yesCoin])
+  const yesPrice = yesMidRaw ? parseFloat(yesMidRaw) : 0.5
   const yesPct = Math.round(yesPrice * 100)
+  const yesCents = formatPriceCents(yesPrice)
+  const noCents = formatPriceCents(1 - yesPrice)
 
-  const isRecurring = market.class === 'priceBinary'
+  const isRecurring = market.class === 'priceBinary' || market.class === 'priceBucket'
 
   return (
     <Link to={`/market/${market.outcomeId}`} className="card p-4 hover:border-amber-500/20 transition-all group">
@@ -65,10 +69,10 @@ export function MarketCard({ market }: { market: ParsedMarket }) {
       <div className="space-y-2">
         <div className="flex justify-between text-xs">
           <span className="text-yes font-medium">
-            {market.sideNames[0]} {yesPct}¢
+            {market.sideNames[0]} {yesCents}¢
           </span>
           <span className="text-no font-medium">
-            {market.sideNames[1]} {100 - yesPct}¢
+            {market.sideNames[1]} {noCents}¢
           </span>
         </div>
         <div className="h-1.5 rounded-full bg-no/60 overflow-hidden">

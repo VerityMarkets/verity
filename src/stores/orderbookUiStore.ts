@@ -56,19 +56,6 @@ export function defaultPrecision(bestAskCents: number): Precision {
 }
 
 /**
- * Map Precision → HL `l2Book` `nSigFigs` for server-side aggregation.
- *
- *   1¢    → 2 sig figs (e.g. 0.49)
- *   0.1¢  → 3 sig figs (e.g. 0.493)
- *   0.01¢ → 4 sig figs (e.g. 0.4923)
- */
-export function precisionToNSigFigs(p: Precision): 2 | 3 | 4 {
-  if (p === '1c') return 2
-  if (p === '0.1c') return 3
-  return 4
-}
-
-/**
  * Map Precision → display tick in "tenths of a basis point"
  * (100 = 1¢, 10 = 0.1¢, 1 = 0.01¢) — used by the client-side row formatter.
  */

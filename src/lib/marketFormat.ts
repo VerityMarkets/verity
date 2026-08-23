@@ -16,6 +16,16 @@ export function parseExpiry(expiry: string): Date | null {
  * Other markets: market.name as-is.
  */
 export function formatMarketName(market: ParsedMarket): string {
+  if (market.class === 'priceBucket') {
+    // Bucket label is already baked into `name`; append the expiry like binaries.
+    const expiryDate = parseExpiry(market.expiry)
+    if (!expiryDate) return market.name
+    const dateStr = expiryDate
+      .toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+      .replace(/\bam\b/i, 'AM')
+      .replace(/\bpm\b/i, 'PM')
+    return `${market.name} on ${dateStr}`
+  }
   if (market.class === 'priceBinary') {
     const expiryDate = parseExpiry(market.expiry)
     if (expiryDate) {
@@ -108,6 +118,41 @@ export function formatFillCents(price: number, side: 'ceil' | 'floor'): string {
 
   const decimals = tickInv === 1 ? 0 : tickInv === 10 ? 1 : 2
   return tickCents.toFixed(decimals)
+}
+
+/**
+ * Convert a user-entered cents string (e.g. "49.5", "0.008", "99.99") to the
+ * HL wire price string in [0,1] using decimal string arithmetic — no float
+ * artifacts like 0.49000000000000005 — and validate HL's price rules for
+ * outcome assets: > 0, < 1, at most 5 significant figures, at most 8 decimals.
+ *
+ * Returns `{ px }` on success or `{ error }` with a user-facing message.
+ */
+export function centsToWirePrice(cents: string): { px: string } | { error: string } {
+  const trimmed = cents.trim()
+  if (!/^\d*\.?\d*$/.test(trimmed) || trimmed === '' || trimmed === '.') {
+    return { error: 'Enter a valid price' }
+  }
+  const [intPartRaw, fracPartRaw = ''] = trimmed.split('.')
+  const intPart = intPartRaw || '0'
+  // cents → probability: shift the decimal point two places left
+  let digits = intPart + fracPartRaw // all digits
+  let pointPos = intPart.length - 2 // index in `digits` where the point goes
+  if (pointPos < 0) {
+    digits = '0'.repeat(-pointPos) + digits
+    pointPos = 0
+  }
+  let whole = digits.slice(0, pointPos) || '0'
+  let frac = digits.slice(pointPos).replace(/0+$/, '')
+  whole = whole.replace(/^0+(?=\d)/, '')
+  const px = frac ? `${whole}.${frac}` : whole
+  const value = parseFloat(px)
+  if (!(value > 0)) return { error: 'Price must be above 0¢' }
+  if (value >= 1) return { error: 'Price must be below 100¢' }
+  if (frac.length > 8) return { error: 'Price has too many decimals (max 0.000001¢)' }
+  const sigFigs = (whole.replace(/^0+/, '') + frac).replace(/^0+/, '').length
+  if (sigFigs > 5) return { error: 'Price may have at most 5 significant figures' }
+  return { px }
 }
 
 /**

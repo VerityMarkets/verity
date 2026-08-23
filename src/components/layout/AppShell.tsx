@@ -14,6 +14,7 @@ import { IS_TESTNET } from '@/config'
 export function AppShell({ children }: { children: ReactNode }) {
   const fetchMarkets = useMarketStore((s) => s.fetchMarkets)
   const subscribeMids = useMarketStore((s) => s.subscribeMids)
+  const subscribeMetaUpdates = useMarketStore((s) => s.subscribeMetaUpdates)
   const selectedMarketId = useMarketStore((s) => s.selectedMarketId)
   const getMarket = useMarketStore((s) => s.getMarket)
   const subscribeChat = useChatStore((s) => s.subscribeChat)
@@ -41,10 +42,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetchMarkets()
     subscribeMids()
+    subscribeMetaUpdates()
     subscribeChat()
 
-    // Poll for new markets every 61s (catches new 15-min markets)
-    const marketPoll = setInterval(() => fetchMarkets(), 61_000)
+    // Market lifecycle (daily 06:00 UTC rollover, new listings) arrives live
+    // on the outcomeMetaUpdates WS channel; this slow poll only backstops
+    // events missed across a WS reconnect.
+    const marketPoll = setInterval(() => fetchMarkets(), 5 * 60_000)
 
     return () => {
       clearInterval(marketPoll)

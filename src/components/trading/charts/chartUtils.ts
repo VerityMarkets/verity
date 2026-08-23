@@ -58,7 +58,7 @@ export function findLiveMarket(
   expiredMarket: ParsedMarket,
   allMarkets: ParsedMarket[]
 ): ParsedMarket | undefined {
-  if (expiredMarket.class !== 'priceBinary') return undefined
+  if (expiredMarket.class !== 'priceBinary' && expiredMarket.class !== 'priceBucket') return undefined
 
   const now = Date.now()
 
@@ -67,6 +67,8 @@ export function findLiveMarket(
       m.class === expiredMarket.class &&
       m.underlying === expiredMarket.underlying &&
       m.period === expiredMarket.period &&
+      // for priceBucket questions, follow the same bucket in the next series
+      (m.bucketIndex ?? -2) === (expiredMarket.bucketIndex ?? -2) &&
       m.outcomeId !== expiredMarket.outcomeId &&
       (parseExpiry(m.expiry)?.getTime() ?? 0) > now
   )

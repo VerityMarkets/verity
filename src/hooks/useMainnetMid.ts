@@ -73,6 +73,13 @@ function connect() {
     }))
   }
 
+  // HL closes idle sockets after 60 s — keep this one alive too.
+  const sock = ws
+  const ping = setInterval(() => {
+    if (ws !== sock || sock.readyState !== WebSocket.OPEN) { clearInterval(ping); return }
+    sock.send(JSON.stringify({ method: 'ping' }))
+  }, 30_000)
+
   ws.onmessage = (event) => {
     try {
       const msg = JSON.parse(event.data as string)
@@ -134,13 +141,16 @@ function getMid(coin: string): string | undefined {
  * Returns the mainnet mid price for a coin.
  * When IS_TESTNET is false, falls back to the normal store mids (already mainnet).
  */
+// Stable no-op subscriber so mainnet builds never open the secondary socket
+// (the shared hlWebSocket already carries mainnet allMids there).
+const noopSubscribe = () => () => {}
+
 export function useMainnetMid(coin: string): string | undefined {
-  // On mainnet, just use the existing store
   const storeMid = useMarketStore((s) => s.mids[coin])
 
   const mainnetMid = useSyncExternalStore(
-    subscribe,
-    () => getMid(coin),
+    IS_TESTNET ? subscribe : noopSubscribe,
+    () => (IS_TESTNET ? getMid(coin) : undefined),
   )
 
   if (!IS_TESTNET) return storeMid

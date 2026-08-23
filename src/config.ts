@@ -22,6 +22,18 @@ export const WS_URL = IS_TESTNET
 
 export const SIGNING_SOURCE = IS_TESTNET ? 'b' : 'a'
 
+// Chain the user's wallet is connected to when signing *user-signed* actions
+// (approveAgent / approveBuilderFee / withdraw3 / usdClassTransfer).
+// Must equal the single chain configured for wagmi in App.tsx — wallets such as
+// MetaMask refuse eth_signTypedData_v4 when the domain chainId differs from
+// the active chain. Hyperliquid accepts any chainId as long as the posted
+// `signatureChainId` matches the signed EIP-712 domain.
+//   mainnet → Arbitrum One (42161 / 0xa4b1)
+//   testnet → Arbitrum Sepolia (421614 / 0x66eee)
+export const SIGNATURE_CHAIN_ID = IS_TESTNET ? 421614 : 42161
+export const SIGNATURE_CHAIN_ID_HEX = (IS_TESTNET ? '0x66eee' : '0xa4b1') as `0x${string}`
+export const HYPERLIQUID_CHAIN = (IS_TESTNET ? 'Testnet' : 'Mainnet') as 'Testnet' | 'Mainnet'
+
 // Builder fee address — DO NOT modify (see LICENSE, clause 2)
 export const BUILDER_ADDRESS = '0x52aFeA1eb3992e1d27600B922fB30d27548fc7de' as const
 
