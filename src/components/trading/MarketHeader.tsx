@@ -1,7 +1,9 @@
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import { MarketTimer } from '../markets/MarketTimer'
 import { formatExpiryWithTimezone, formatShares, formatPriceCents } from '@/lib/marketFormat'
-import { CoinLogo } from '@/components/common/CoinLogo'
+import { categoryChip, formatDateTime, timeState } from '@/lib/marketDisplay'
+import { MarketAvatar } from '@/components/common/MarketAvatar'
+import { VenueTag } from '@/components/markets/SeriesHeader'
 import { useMarketMid, useQuoteState } from '@/hooks/useMarketMid'
 import { SeriesStrip } from './SeriesStrip'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
@@ -52,15 +54,31 @@ export function MarketHeader({ market, settled, settlementResult, settleFraction
   const isBucket = market.class === 'priceBucket'
   const isRecurring = isBinary || isBucket
 
+  // Permissionless markets say what they are and who settles them; protocol
+  // price ladders say "1d" and link the perp oracle instead.
+  const chip = categoryChip(market.category, market.subCategory)
+  const when = timeState(market.startsAt, market.expiry)
+  const startsAt = formatDateTime(market.startsAt)
+  const resolvesBy = formatDateTime(market.expiry)
+  // A named outcome of a question ("Draw") only makes sense under its question.
+  const kicker = market.kind === 'question-member' ? market.questionName : undefined
+
   // Green/red split bar
 
   return (
     <div className="card p-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
-          {market.underlying && <CoinLogo symbol={market.underlying} size={40} className="mt-0.5" />}
+          <MarketAvatar
+            symbol={market.underlying}
+            category={market.category}
+            subCategory={market.subCategory}
+            label={market.name}
+            size={40}
+            className="mt-0.5"
+          />
           <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex flex-wrap items-center gap-2 mb-1 text-[10px]">
             <span className="text-xs text-gray-500 font-mono">
               #{market.outcomeId}
             </span>
@@ -74,7 +92,23 @@ export function MarketHeader({ market, settled, settlementResult, settleFraction
                 {market.period}
               </span>
             )}
+            {!isRecurring && chip && (
+              <span className="font-semibold text-gray-400 bg-surface-3 px-1.5 rounded leading-4 capitalize">
+                {chip}
+              </span>
+            )}
+            {!settled && when.mode === 'live' && (
+              <span className="inline-flex items-center gap-1 font-semibold text-yes">
+                <span className="w-1.5 h-1.5 rounded-full bg-yes" />
+                Live
+              </span>
+            )}
+            {market.venue && <VenueTag venue={market.venue} feeScale={market.deployerFeeScale} />}
           </div>
+
+          {kicker && (
+            <div className="text-xs text-gray-500 leading-snug">{kicker}</div>
+          )}
 
           <h1 className="text-lg font-bold text-gray-100">
             {isRecurring ? (
@@ -93,7 +127,11 @@ export function MarketHeader({ market, settled, settlementResult, settleFraction
             )}
           </h1>
 
-          {isRecurring && market.underlying && (
+          {/* Only price markets settle on a perp mark; everything else names an
+              official source instead. Permissionless price templates
+              (`perp:BTC`) get the same link — `xyz:`-prefixed perps resolve to
+              no bare ticker and so fall through. */}
+          {market.category === 'price' && market.underlying && (
             <div className="flex items-center gap-1.5 mt-1">
               <span className="text-[10px] text-gray-500">Oracle:</span>
               <a
@@ -107,6 +145,18 @@ export function MarketHeader({ market, settled, settlementResult, settleFraction
                   <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>
               </a>
+            </div>
+          )}
+
+          {!isRecurring && (startsAt || resolvesBy || market.officialSource) && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-[10px] text-gray-500">
+              {startsAt && <span>Starts {startsAt}</span>}
+              {resolvesBy && <span>Resolves by {resolvesBy}</span>}
+              {market.officialSource && (
+                <span>
+                  Source: <span className="text-gray-400">{market.officialSource}</span>
+                </span>
+              )}
             </div>
           )}
 

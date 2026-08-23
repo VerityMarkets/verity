@@ -98,7 +98,10 @@ export function getMarketCategory(market: ParsedMarket): string {
 
     if (cat.match.class?.includes(market.class)) return cat.id
     if (cat.match.underlying?.test(market.underlying)) return cat.id
+    // A question member's own name is just a label ("Below 4.3%", "Spain") —
+    // the subject lives on the question, so match that too.
     if (cat.match.keywords?.test(market.name)) return cat.id
+    if (market.questionName && cat.match.keywords?.test(market.questionName)) return cat.id
   }
 
   return 'uncategorized'

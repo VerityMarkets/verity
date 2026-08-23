@@ -3,8 +3,11 @@ import { Link } from 'react-router-dom'
 import { useMarketStore } from '@/stores/marketStore'
 import { useOrderBookStore } from '@/stores/orderbookStore'
 import { useMarketMid, useQuoteState } from '@/hooks/useMarketMid'
+import { useRowOrder } from '@/hooks/useRowOrder'
 import { groupBySeries, seriesKey, type SeriesRow } from '@/lib/series'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
+
+const EMPTY_ROWS: SeriesRow[] = []
 
 const compact = (n: number) =>
   n >= 1000 ? `${(n / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : n.toLocaleString()
@@ -48,10 +51,14 @@ export function SeriesStrip({ market }: { market: ParsedMarket }) {
   const key = seriesKey(market)
   const series = groupBySeries(markets.filter((m) => seriesKey(m) === key))[0]
 
+  // Question members read as a field of candidates, so they rank by probability
+  // like the card does. Price ladders keep their price order.
+  const rows = useRowOrder(series?.rows ?? EMPTY_ROWS, series?.kind === 'question-member')
+
   // Keep sibling Yes books live so chips show real mids / "—" for empty books.
   // The active market's books are owned by MarketPage; skip those here so
   // our cleanup doesn't tear them down.
-  const siblings = (series?.rows ?? [])
+  const siblings = (series?.rows ?? EMPTY_ROWS)
     .map((r) => r.market.yesCoin)
     .filter((c) => c !== market.yesCoin && c !== market.noCoin)
   useEffect(() => {
@@ -64,7 +71,7 @@ export function SeriesStrip({ market }: { market: ParsedMarket }) {
 
   return (
     <div className="flex items-center gap-2 overflow-x-auto pb-1 -mb-1 [scrollbar-width:none]">
-      {[...series.rows.filter((r) => !r.isBinary), ...series.rows.filter((r) => r.isBinary)].map((r) => (
+      {[...rows.filter((r) => !r.isBinary), ...rows.filter((r) => r.isBinary)].map((r) => (
         <Chip key={r.market.outcomeId} row={r} active={r.market.outcomeId === market.outcomeId} tagBinary={series.hasBuckets} />
       ))}
     </div>

@@ -42,6 +42,8 @@ export interface Series {
   startsAt?: string
   /** Deployer venue tag; null for protocol series. */
   venue?: string | null
+  /** Deployer's fee scale, shown in the venue tag's tooltip. */
+  deployerFeeScale?: string | null
 }
 
 const fmtUsd = (n: number) => '$' + n.toLocaleString(undefined, { maximumFractionDigits: 6 })
@@ -102,6 +104,7 @@ export function groupBySeries(markets: ParsedMarket[]): Series[] {
         subCategory: m.subCategory,
         startsAt: m.startsAt,
         venue: m.venue ?? null,
+        deployerFeeScale: m.deployerFeeScale ?? null,
       }
       map.set(key, s)
     }
