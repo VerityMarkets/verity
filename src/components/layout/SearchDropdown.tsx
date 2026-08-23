@@ -19,14 +19,13 @@ function marketTitle(m: ParsedMarket): string {
   return m.name
 }
 
-/** Format expiry string "YYYYMMDD-HHMM" → "Mar 13, 03:00" */
+/** "YYYYMMDD-HHMM" (UTC) → "13 Mar" (local) */
 function formatExpiry(expiry: string): string {
   const match = expiry.match(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/)
   if (!match) return expiry
   const [, y, mo, d, h, mi] = match
-  const date = new Date(+y, +mo - 1, +d, +h, +mi)
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
-    ', ' + h + ':' + mi
+  const date = new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi))
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 interface SearchDropdownProps {
@@ -123,14 +122,14 @@ export function SearchDropdown({ className = '', placeholder = 'Search markets..
                   <div className="text-sm text-gray-200 truncate">
                     {marketTitle(m)}
                   </div>
-                  <div className="flex items-center gap-2 text-[10px] text-gray-500 font-mono">
-                    <span className="capitalize">
-                      {m.underlying || categoryChip(m.category, m.subCategory)}
-                    </span>
-                    {m.period && <span className="text-gray-600">·</span>}
-                    {m.period && <span>{m.period}</span>}
-                    {m.expiry && <span className="text-gray-600">·</span>}
-                    {m.expiry && <span>{formatExpiry(m.expiry)}</span>}
+                  <div className="text-[10px] text-gray-500 truncate capitalize">
+                    {[
+                      m.underlying || categoryChip(m.category, m.subCategory),
+                      m.period,
+                      m.expiry ? formatExpiry(m.startsAt || m.expiry) : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </div>
                 </div>
                 <div className="text-sm font-semibold text-yes shrink-0">

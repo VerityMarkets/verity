@@ -22,9 +22,11 @@ export function HomePage() {
 
       {/* Global Trollbox — right sidebar, hidden on mobile */}
       <div className="hidden lg:block w-72 shrink-0">
+        {/* <main> is the scroll container, so sticky offsets are measured
+            from its top edge: match the content padding (py-4). */}
         <Trollbox
-          className="sticky top-[4.5rem]"
-          style={{ height: 'calc(100vh - 6rem)' }}
+          className="sticky top-4"
+          style={{ height: 'calc(100vh - 3.625rem - 2rem)' }}
         />
       </div>
     </div>

@@ -104,11 +104,24 @@ export function outcomeToParsedMarket(
         : undefined
     : undefined
 
-  const questionName = q
+  let questionName = q
     ? questionTemplateId
       ? resolveTemplateName(q, templates, parentKv)
       : q.name
     : undefined
+  // Deployers reuse the 2-team `sportsContestResult` template ("{competition}
+  // {stage}: {participantA} v {participantB}") for tournament/season-winner
+  // questions with many entrants. When the question has more than two real
+  // contestants, title it as a winner market instead of "A v B".
+  if (q && questionTemplateId && parentKv?.competition) {
+    const entrants = q.namedOutcomes.length
+    const type = (parentKv.contestType ?? '').toLowerCase()
+    if (entrants > 3 || type === 'tournament' || type === 'season') {
+      const season = parentKv.season ? ` ${parentKv.season}` : ''
+      const stage = parentKv.stage && !/^(tournament|season)$/i.test(parentKv.stage) ? ` ${parentKv.stage}` : ''
+      questionName = `${parentKv.competition}${season}${stage} winner`
+    }
+  }
 
   let name: string
   if (isFallback) {

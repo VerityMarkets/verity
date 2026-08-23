@@ -14,6 +14,7 @@ const UNDERLYING_ORDER = ['BTC', 'ETH', 'SOL', 'HYPE']
  *  caps a client at 1000 subscriptions — with 400+ listed markets on testnet,
  *  rendering everything at once would blow past that and kill the socket. */
 const PAGE_SIZE = 24
+const TRENDING_LIMIT = 50
 
 /**
  * HL returns exactly "0.5" from allMids for a coin nobody has ever quoted, so
@@ -110,7 +111,13 @@ export function MarketList({ category = 'trending' }: { category?: Category }) {
     )
   }, [filtered, quotedSig])
 
-  const visible = useMemo(() => series.slice(0, page * PAGE_SIZE), [series, page])
+  // Trending is a shortlist, not the whole universe: the 50 best-ranked
+  // series (quoted first). Category tabs still page through everything.
+  const ranked = useMemo(
+    () => (category === 'trending' ? series.slice(0, TRENDING_LIMIT) : series),
+    [series, category],
+  )
+  const visible = useMemo(() => ranked.slice(0, page * PAGE_SIZE), [ranked, page])
 
   // Keep the Yes-side book of every *rendered* market live so cards can show
   // real mids and flag markets nobody has quoted yet (allMids reports a 0.5
@@ -172,7 +179,7 @@ export function MarketList({ category = 'trending' }: { category?: Category }) {
     )
   }
 
-  const remaining = series.length - visible.length
+  const remaining = ranked.length - visible.length
 
   // CSS multi-column gives a masonry-like flow: cards of different heights
   // pack without leaving a tall card's neighbours floating over empty space.
