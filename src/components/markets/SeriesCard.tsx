@@ -81,7 +81,9 @@ function BucketBar({ rows }: { rows: SeriesRow[] }) {
   if (buckets.length < 2) return null
 
   // A bucket's share is only "known" when its book is two-sided; unknown
-  // buckets split whatever probability the known ones leave over, in grey.
+  // buckets split whatever probability the known ones leave over and show
+  // "—". Colour always encodes the price range (red low → green high), not
+  // whether the bucket is priced, so unknown segments keep their hue (dimmed).
   const known = buckets.map((r) => {
     const b = books[r.market.yesCoin]
     return !!(b && b.bids.length && b.asks.length)
@@ -113,8 +115,8 @@ function BucketBar({ rows }: { rows: SeriesRow[] }) {
         {pcts.map((p, i) => (
           <div
             key={i}
-            className={`${known[i] ? colors[i % colors.length] : 'bg-surface-3'} flex items-center justify-center overflow-hidden ${
-              known[i] ? 'text-gray-950/80' : 'text-gray-500'
+            className={`${colors[i % colors.length]} flex items-center justify-center overflow-hidden text-gray-950/80 ${
+              known[i] ? '' : 'opacity-50'
             }`}
             style={{ width: `${p}%` }}
             title={known[i] ? undefined : 'No quotes yet'}
