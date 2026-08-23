@@ -31,6 +31,9 @@ export interface Series {
 }
 
 const fmtUsd = (n: number) => '$' + n.toLocaleString(undefined, { maximumFractionDigits: 6 })
+/** "$74.6k" — used where both bounds are shown and the exact values appear on neighbouring rows */
+export const compactUsd = (n: number) =>
+  n >= 1000 ? `$${(n / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : fmtUsd(n)
 
 export function seriesKey(m: ParsedMarket): string {
   return m.underlying && m.period && m.expiry
@@ -40,16 +43,21 @@ export function seriesKey(m: ParsedMarket): string {
 
 export function toSeriesRow(m: ParsedMarket): SeriesRow {
   if (m.class === 'priceBinary') {
-    return { market: m, kind: 'above', lo: m.targetPrice, label: `above ${fmtUsd(m.targetPrice)}`, isBinary: true }
+    return { market: m, kind: 'above', lo: m.targetPrice, label: fmtUsd(m.targetPrice), isBinary: true }
   }
   if (m.class === 'priceBucket' && m.priceThresholds?.length && m.bucketIndex != null && m.bucketIndex >= 0) {
     const t = m.priceThresholds
     const i = m.bucketIndex
-    if (i === 0) return { market: m, kind: 'below', hi: t[0], label: `below ${fmtUsd(t[0])}`, isBinary: false }
-    if (i >= t.length) return { market: m, kind: 'above', lo: t[t.length - 1], label: `above ${fmtUsd(t[t.length - 1])}`, isBinary: false }
-    return { market: m, kind: 'between', lo: t[i - 1], hi: t[i], label: `${fmtUsd(t[i - 1])}–${fmtUsd(t[i])}`, isBinary: false }
+    if (i === 0) return { market: m, kind: 'below', hi: t[0], label: fmtUsd(t[0]), isBinary: false }
+    if (i >= t.length) return { market: m, kind: 'above', lo: t[t.length - 1], label: fmtUsd(t[t.length - 1]), isBinary: false }
+    return { market: m, kind: 'between', lo: t[i - 1], hi: t[i], label: `${compactUsd(t[i - 1])} ↔ ${compactUsd(t[i])}`, isBinary: false }
   }
   return { market: m, kind: 'other', label: m.name, isBinary: false }
+}
+
+/** Glyph for a row kind: ↓ below, ↑ above; 'between' carries ↔ inside its label. */
+export function rowGlyph(kind: SeriesRow['kind']): string {
+  return kind === 'below' ? '↓' : kind === 'above' ? '↑' : ''
 }
 
 /** Sort key along the price ladder: "below X" sorts by X, "between" by lo, "above" by lo (just after an equal "between" lo). */

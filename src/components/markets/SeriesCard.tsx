@@ -1,15 +1,14 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useMarketStore } from '@/stores/marketStore'
 import { formatPriceCents } from '@/lib/marketFormat'
-import { seriesTitle, type Series, type SeriesRow } from '@/lib/series'
+import { seriesTitle, rowGlyph, compactUsd, type Series, type SeriesRow } from '@/lib/series'
 import { CoinLogo } from '@/components/common/CoinLogo'
 import { MarketTimer } from './MarketTimer'
 
 function RowIcon({ kind }: { kind: SeriesRow['kind'] }) {
-  if (kind === 'below') return <span className="text-no">↓</span>
-  if (kind === 'above') return <span className="text-yes">↑</span>
-  if (kind === 'between') return <span className="text-gray-400">↔</span>
-  return null
+  const g = rowGlyph(kind)
+  if (!g) return null
+  return <span className={kind === 'below' ? 'text-no' : 'text-yes'}>{g} </span>
 }
 
 function SeriesRowView({ row, tagBinary }: { row: SeriesRow; tagBinary: boolean }) {
@@ -33,11 +32,11 @@ function SeriesRowView({ row, tagBinary }: { row: SeriesRow; tagBinary: boolean 
         tagBinary && row.isBinary ? 'bg-amber-500/[0.06]' : ''
       }`}
     >
-      <span className="text-sm text-gray-200 leading-tight min-w-0">
-        <RowIcon kind={row.kind} />{' '}
-        <span className="tabular-nums">{row.label}</span>
+      <span className="text-sm text-gray-200 whitespace-nowrap overflow-hidden text-ellipsis min-w-0 tabular-nums">
+        <RowIcon kind={row.kind} />
+        {row.label}
         {tagBinary && row.isBinary && (
-          <span className="ml-1.5 text-[9px] uppercase tracking-wide text-amber-400/80 font-semibold">binary</span>
+          <span className="ml-1 text-[9px] uppercase tracking-wide text-amber-400/80 font-semibold">bin</span>
         )}
       </span>
       <span className="text-sm font-bold text-gray-100 tabular-nums w-9 text-right">{pct}%</span>
@@ -57,26 +56,46 @@ function SeriesRowView({ row, tagBinary }: { row: SeriesRow; tagBinary: boolean 
   )
 }
 
-/** Stacked odds bar for the bucket question (their Yes prices sum to ~100%). */
+/**
+ * Stacked odds bar for the bucket question (Yes prices sum to ~100%).
+ * Percentages sit inside their segment; the price thresholds are drawn once,
+ * at the segment boundaries, so nothing is repeated.
+ */
 function BucketBar({ rows }: { rows: SeriesRow[] }) {
   const mids = useMarketStore((s) => s.mids)
   const buckets = rows.filter((r) => !r.isBinary && r.kind !== 'other')
   if (buckets.length < 2) return null
   const vals = buckets.map((r) => (mids[r.market.yesCoin] ? parseFloat(mids[r.market.yesCoin]) : 0))
   const total = vals.reduce((a, b) => a + b, 0) || 1
-  const colors = ['bg-no/70', 'bg-amber-400/80', 'bg-yes/70', 'bg-blue-400/70', 'bg-purple-400/70']
+  const pcts = vals.map((v) => (v / total) * 100)
+  const colors = ['bg-no/60', 'bg-amber-400/70', 'bg-yes/60', 'bg-blue-400/60', 'bg-purple-400/60']
+  // boundary positions (cumulative %) and the threshold each marks
+  const bounds: { left: number; label: string }[] = []
+  let acc = 0
+  for (let i = 0; i < buckets.length - 1; i++) {
+    acc += pcts[i]
+    const t = buckets[i].hi ?? buckets[i + 1].lo
+    if (t != null) bounds.push({ left: acc, label: compactUsd(t) })
+  }
   return (
     <div className="mt-3">
-      <div className="h-1.5 rounded-full overflow-hidden flex bg-surface-3">
-        {vals.map((v, i) => (
-          <div key={i} className={colors[i % colors.length]} style={{ width: `${(v / total) * 100}%` }} />
+      <div className="h-4 rounded overflow-hidden flex text-[10px] font-semibold tabular-nums">
+        {pcts.map((p, i) => (
+          <div
+            key={i}
+            className={`${colors[i % colors.length]} flex items-center justify-center text-gray-950/80 overflow-hidden`}
+            style={{ width: `${p}%` }}
+          >
+            {p >= 9 ? `${Math.round(p)}%` : ''}
+          </div>
         ))}
       </div>
-      <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-gray-500">
-        {buckets.map((r, i) => (
-          <span key={r.market.outcomeId}>
-            {r.label} <span className="text-gray-400">{Math.round((vals[i] / total) * 100)}%</span>
-          </span>
+      <div className="relative h-5 text-[10px] text-gray-400 tabular-nums">
+        {bounds.map((b, i) => (
+          <div key={i} className="absolute top-0" style={{ left: `${b.left}%` }}>
+            <div className="w-px h-1.5 bg-gray-500 mx-auto" />
+            <div className="-translate-x-1/2 whitespace-nowrap leading-none mt-0.5">{b.label}</div>
+          </div>
         ))}
       </div>
     </div>
@@ -88,7 +107,7 @@ export function SeriesCard({ series }: { series: Series }) {
   const first = series.rows[0]?.market
 
   return (
-    <div className="card p-4 hover:border-amber-500/20 transition-all">
+    <div className="card p-4 hover:border-amber-500/20 transition-all break-inside-avoid mb-4">
       <div className="flex items-start gap-3 mb-2">
         <CoinLogo symbol={series.underlying || first?.name?.slice(0, 1) || '?'} size={32} />
         <div className="flex-1 min-w-0">

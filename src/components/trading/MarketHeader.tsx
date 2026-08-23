@@ -1,8 +1,8 @@
-import { useMarketStore } from '@/stores/marketStore'
 import { usePortfolioStore } from '@/stores/portfolioStore'
 import { MarketTimer } from '../markets/MarketTimer'
 import { formatExpiryWithTimezone, formatShares, formatPriceCents } from '@/lib/marketFormat'
 import { CoinLogo } from '@/components/common/CoinLogo'
+import { useMarketMid } from '@/hooks/useMarketMid'
 import { SeriesStrip } from './SeriesStrip'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
 
@@ -17,12 +17,10 @@ interface MarketHeaderProps {
 export function MarketHeader({ market, settled, settlementResult, settleFraction }: MarketHeaderProps) {
   // Granular selectors — only re-render when *these* coins' mids change, not
   // on every other coin's allMids tick (allMids fires for the full universe).
-  const yesMidRaw = useMarketStore((s) => s.mids[market.yesCoin])
-  const noMidRaw = useMarketStore((s) => s.mids[market.noCoin])
+  // Order-book mid when both sides are quoted, else allMids.
+  const yesMid = useMarketMid(market.yesCoin)
+  const noMid = useMarketMid(market.noCoin)
   const balances = usePortfolioStore((s) => s.balances)
-
-  const yesMid = yesMidRaw ? parseFloat(yesMidRaw) : 0.5
-  const noMid = noMidRaw ? parseFloat(noMidRaw) : 0.5
 
   // User position: look up token balances for this market's yes/no coins
   const yesTokenCoin = '+' + market.yesCoin.slice(1)

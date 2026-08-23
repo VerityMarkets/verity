@@ -16,6 +16,8 @@ function parseExpiry(expiry: string): Date | null {
   return new Date(Date.UTC(y, mo, d, h, mi))
 }
 
+const UNDERLYING_ORDER = ['BTC', 'ETH', 'SOL', 'HYPE']
+
 export function MarketList({ category = 'trending' }: { category?: Category }) {
   const markets = useMarketStore((s) => s.markets)
   const loading = useMarketStore((s) => s.loading)
@@ -55,9 +57,22 @@ export function MarketList({ category = 'trending' }: { category?: Category }) {
     return list
   }, [markets, category, getYesPrice])
 
-  // Group related markets (same underlying · period · expiry) into one card,
-  // preserving the order of their first member from the sort above.
-  const series = useMemo(() => groupBySeries(filtered), [filtered])
+  // Group related markets (same underlying · period · expiry) into one card.
+  // Ordering is deterministic (not price-driven) so cards don't shuffle as
+  // mids arrive: richer series first, then a fixed underlying order, then
+  // soonest expiry.
+  const series = useMemo(() => {
+    const rank = (u: string) => {
+      const i = UNDERLYING_ORDER.indexOf(u.toUpperCase())
+      return i === -1 ? UNDERLYING_ORDER.length : i
+    }
+    return groupBySeries(filtered).sort(
+      (a, b) =>
+        b.rows.length - a.rows.length ||
+        rank(a.underlying) - rank(b.underlying) ||
+        a.expiry.localeCompare(b.expiry),
+    )
+  }, [filtered])
 
   if (loading && markets.length === 0) {
     return (
@@ -93,8 +108,10 @@ export function MarketList({ category = 'trending' }: { category?: Category }) {
     )
   }
 
+  // CSS multi-column gives a masonry-like flow: cards of different heights
+  // pack without leaving a tall card's neighbours floating over empty space.
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
+    <div className="columns-1 sm:columns-2 lg:columns-3 gap-4">
       {series.map((s) => (
         <SeriesCard key={s.key} series={s} />
       ))}

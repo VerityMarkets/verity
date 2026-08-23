@@ -10,6 +10,7 @@ import { ChartHeader } from './charts/ChartHeader'
 import { ChartCountdown } from './charts/ChartCountdown'
 import { parseExpiry, parsePeriodMinutes } from './charts/chartUtils'
 import { formatPriceCents } from '@/lib/marketFormat'
+import { useMarketMid } from '@/hooks/useMarketMid'
 import { VerityWordmark } from '@/components/VerityWordmark'
 import type { ChartType } from './charts/ChartTypeSelector'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
@@ -36,7 +37,6 @@ function bucketRangeLabel(m: ParsedMarket): string | undefined {
 export function ChartContainer({ market, settled, settlementPrice, settlementResult }: ChartContainerProps) {
   const mid = useMainnetMid(market.underlying)
   const tradeSide = useMarketStore((s) => s.tradeSide)
-  const mids = useMarketStore((s) => s.mids)
   const allFills = usePortfolioStore((s) => s.fills)
 
   // Filter fills to this market's coins
@@ -102,7 +102,6 @@ export function ChartContainer({ market, settled, settlementPrice, settlementRes
         <ProbabilityHeader
           market={market}
           tradeSide={tradeSide}
-          mids={mids}
           isExpired={isExpired}
         />
       )}
@@ -148,16 +147,14 @@ export function ChartContainer({ market, settled, settlementPrice, settlementRes
 function ProbabilityHeader({
   market,
   tradeSide,
-  mids,
   isExpired,
 }: {
   market: ParsedMarket
   tradeSide: 'yes' | 'no'
-  mids: Record<string, string>
   isExpired: boolean
 }) {
   const coin = tradeSide === 'yes' ? market.yesCoin : market.noCoin
-  const midVal = mids[coin] ? parseFloat(mids[coin]) : 0.5
+  const midVal = useMarketMid(coin)
   const pct = formatPriceCents(midVal)
   const isUp = tradeSide === 'yes'
   const direction = isUp ? 'UP' : 'DOWN'

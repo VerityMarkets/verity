@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createChart, AreaSeries } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts'
 import { fetchCandles, fetchRecentTrades } from '@/lib/hyperliquid/api'
-import { useMarketStore } from '@/stores/marketStore'
+import { useMarketMid } from '@/hooks/useMarketMid'
 import { formatPriceCents } from '@/lib/marketFormat'
 import { getBaseChartOptions, toLocalChartTime } from './chartUtils'
 
@@ -11,7 +11,8 @@ export function ProbabilityChart({ coin }: { coin: string }) {
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Area'> | null>(null)
   const lastTimeRef = useRef<number>(0)
-  const mid = useMarketStore((s) => s.mids[coin])
+  // Order-book mid when both sides are quoted; allMids otherwise.
+  const mid = useMarketMid(coin)
 
   // Backfill mode: 'candles' (loaded from HL candleSnapshot) | 'trades' (loaded
   // from REST recentTrades) | 'pending' (waiting on candle fetch).
@@ -128,7 +129,7 @@ export function ProbabilityChart({ coin }: { coin: string }) {
   // wall-clock minute and the x-axis auto-labels collapse to repeated "HH:MM".
   useEffect(() => {
     if (!seriesRef.current || !mid) return
-    const value = parseFloat(mid)
+    const value = mid
     if (isNaN(value)) return
 
     const nowSec = toLocalChartTime(Date.now())

@@ -7,9 +7,9 @@ const compact = (n: number) =>
   n >= 1000 ? `${(n / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : n.toLocaleString()
 
 function chipLabel(r: SeriesRow): string {
-  if (r.kind === 'below') return `Below ${compact(r.hi ?? 0)}`
-  if (r.kind === 'above') return `Above ${compact(r.lo ?? 0)}`
-  if (r.kind === 'between') return `${compact(r.lo ?? 0)} – ${compact(r.hi ?? 0)}`
+  if (r.kind === 'below') return compact(r.hi ?? 0)
+  if (r.kind === 'above') return compact(r.lo ?? 0)
+  if (r.kind === 'between') return `${compact(r.lo ?? 0)} ↔ ${compact(r.hi ?? 0)}`
   return r.label
 }
 
@@ -25,9 +25,11 @@ function Chip({ row, active, tagBinary }: { row: SeriesRow; active: boolean; tag
           : 'bg-surface-2 text-gray-300 border-white/5 hover:text-gray-100 hover:border-white/15'
       }`}
     >
-      <span className={row.kind === 'below' ? 'text-no' : row.kind === 'above' ? 'text-yes' : 'text-gray-400'}>
-        {row.kind === 'below' ? '↓' : row.kind === 'above' ? '↑' : '↔'}
-      </span>
+      {row.kind !== 'between' && (
+        <span className={row.kind === 'below' ? 'text-no' : 'text-yes'}>
+          {row.kind === 'below' ? '↓' : '↑'}
+        </span>
+      )}
       {chipLabel(row)}
       <span className={active ? 'text-amber-300' : 'text-gray-500'}>{pct}%</span>
       {tagBinary && row.isBinary && <span className="text-[9px] uppercase tracking-wide opacity-70">binary</span>}
