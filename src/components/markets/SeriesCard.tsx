@@ -118,10 +118,17 @@ function BucketBar({ rows }: { rows: SeriesRow[] }) {
           <div
             key={i}
             className={`${known[i] ? colors[i % colors.length] : dimColors[i % dimColors.length]} flex items-center justify-center overflow-hidden text-gray-950/80`}
-            style={{ width: `${p}%` }}
+            style={{
+              width: `${p}%`,
+              // Unpriced: hatch the segment (gray-400, same as the threshold
+              // labels) over its range colour instead of printing a value.
+              ...(known[i]
+                ? {}
+                : { backgroundImage: 'repeating-linear-gradient(-45deg, rgba(156,163,175,0.6) 0 2px, transparent 2px 7px)' }),
+            }}
             title={known[i] ? undefined : 'No quotes yet'}
           >
-            {known[i] ? (p >= 9 ? `${Math.round(p)}%` : '') : p >= 9 ? '—' : ''}
+            {known[i] && p >= 9 ? `${Math.round(p)}%` : ''}
           </div>
         ))}
       </div>
