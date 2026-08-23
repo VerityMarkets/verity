@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useMarketStore } from '@/stores/marketStore'
 import { useOrderBookStore } from '@/stores/orderbookStore'
-import { useMarketMid } from '@/hooks/useMarketMid'
+import { useMarketMid, useQuoteState } from '@/hooks/useMarketMid'
 import { formatPriceCents } from '@/lib/marketFormat'
 import { seriesTitle, rowGlyph, compactUsd, type Series, type SeriesRow } from '@/lib/series'
 import { CoinLogo } from '@/components/common/CoinLogo'
@@ -11,14 +11,6 @@ function RowIcon({ kind }: { kind: SeriesRow['kind'] }) {
   const g = rowGlyph(kind)
   if (!g) return null
   return <span className={kind === 'below' ? 'text-no' : 'text-yes'}>{g} </span>
-}
-
-/** Book state for a Yes coin: undefined = not loaded yet; quoted = at least one side has levels. */
-function useQuoteState(coin: string): { loaded: boolean; quoted: boolean; twoSided: boolean } {
-  const nBids = useOrderBookStore((s) => s.books[coin]?.bids.length)
-  const nAsks = useOrderBookStore((s) => s.books[coin]?.asks.length)
-  const loaded = nBids !== undefined
-  return { loaded, quoted: loaded && ((nBids ?? 0) > 0 || (nAsks ?? 0) > 0), twoSided: (nBids ?? 0) > 0 && (nAsks ?? 0) > 0 }
 }
 
 function SeriesRowView({ row, tagBinary }: { row: SeriesRow; tagBinary: boolean }) {

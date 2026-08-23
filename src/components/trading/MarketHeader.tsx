@@ -2,7 +2,7 @@ import { usePortfolioStore } from '@/stores/portfolioStore'
 import { MarketTimer } from '../markets/MarketTimer'
 import { formatExpiryWithTimezone, formatShares, formatPriceCents } from '@/lib/marketFormat'
 import { CoinLogo } from '@/components/common/CoinLogo'
-import { useMarketMid } from '@/hooks/useMarketMid'
+import { useMarketMid, useQuoteState } from '@/hooks/useMarketMid'
 import { SeriesStrip } from './SeriesStrip'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
 
@@ -20,6 +20,10 @@ export function MarketHeader({ market, settled, settlementResult, settleFraction
   // Order-book mid when both sides are quoted, else allMids.
   const yesMid = useMarketMid(market.yesCoin)
   const noMid = useMarketMid(market.noCoin)
+  const yesQuote = useQuoteState(market.yesCoin)
+  const noQuote = useQuoteState(market.noCoin)
+  // Both books loaded and empty → HL's allMids value is a placeholder, not a price
+  const unquoted = !settled && yesQuote.loaded && noQuote.loaded && !yesQuote.quoted && !noQuote.quoted
   const balances = usePortfolioStore((s) => s.balances)
 
   // User position: look up token balances for this market's yes/no coins
@@ -40,8 +44,9 @@ export function MarketHeader({ market, settled, settlementResult, settleFraction
     ? (settleFraction != null ? 1 - settleFraction : (settlementResult === 'no' ? 1 : 0))
     : noMid
 
-  const yesPct = formatPriceCents(yesPrice)
-  const noPct = formatPriceCents(noPrice)
+  const yesPct = unquoted ? '—' : formatPriceCents(yesPrice)
+  const noPct = unquoted ? '—' : formatPriceCents(noPrice)
+  const barPct = unquoted ? 50 : yesPrice * 100
 
   const isBinary = market.class === 'priceBinary'
   const isBucket = market.class === 'priceBucket'
@@ -137,7 +142,7 @@ export function MarketHeader({ market, settled, settlementResult, settleFraction
           {(yesShares > 0 || noShares > 0) && <div className="w-px h-10 bg-white/10" />}
 
           <div className="text-center">
-            <div className="text-2xl font-bold text-yes">{yesPct}¢</div>
+            <div className="text-2xl font-bold text-yes">{yesPct}{unquoted ? '' : '¢'}</div>
             <div className="text-[10px] text-gray-500 uppercase">
               {market.sideNames[0]}
             </div>
@@ -145,7 +150,7 @@ export function MarketHeader({ market, settled, settlementResult, settleFraction
           <div className="w-px h-10 bg-white/10" />
           <div className="text-center">
             <div className="text-2xl font-bold text-no">
-              {noPct}¢
+              {noPct}{unquoted ? '' : '¢'}
             </div>
             <div className="text-[10px] text-gray-500 uppercase">
               {market.sideNames[1]}
@@ -164,13 +169,15 @@ export function MarketHeader({ market, settled, settlementResult, settleFraction
       {/* Progress bar + timer */}
       <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
         <div className="flex-1 mr-4">
-          <div className="h-2 rounded-full bg-no/60 overflow-hidden">
+          <div className={`h-2 rounded-full overflow-hidden ${unquoted ? 'bg-surface-3' : 'bg-no/60'}`}>
             {/* No transition — width snaps on each WS tick. With frequent
                 updates a 500ms animation never settles and reads as flicker. */}
-            <div
-              className="h-full rounded-full bg-yes"
-              style={{ width: `${yesPct}%` }}
-            />
+            {!unquoted && (
+              <div
+                className="h-full rounded-full bg-yes"
+                style={{ width: `${barPct}%` }}
+              />
+            )}
           </div>
         </div>
         {settled ? (

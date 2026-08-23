@@ -1,5 +1,8 @@
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useMarketStore } from '@/stores/marketStore'
+import { useOrderBookStore } from '@/stores/orderbookStore'
+import { useMarketMid, useQuoteState } from '@/hooks/useMarketMid'
 import { groupBySeries, seriesKey, type SeriesRow } from '@/lib/series'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
 
@@ -14,8 +17,9 @@ function chipLabel(r: SeriesRow): string {
 }
 
 function Chip({ row, active, tagBinary }: { row: SeriesRow; active: boolean; tagBinary: boolean }) {
-  const midRaw = useMarketStore((s) => s.mids[row.market.yesCoin])
-  const pct = Math.round((midRaw ? parseFloat(midRaw) : 0.5) * 100)
+  const mid = useMarketMid(row.market.yesCoin)
+  const quote = useQuoteState(row.market.yesCoin)
+  const pct = quote.loaded && !quote.quoted ? '—' : `${Math.round(mid * 100)}%`
   return (
     <Link
       to={`/market/${row.market.outcomeId}`}
@@ -31,7 +35,7 @@ function Chip({ row, active, tagBinary }: { row: SeriesRow; active: boolean; tag
         </span>
       )}
       {chipLabel(row)}
-      <span className={active ? 'text-amber-300' : 'text-gray-500'}>{pct}%</span>
+      <span className={active ? 'text-amber-300' : 'text-gray-500'}>{pct}</span>
       {tagBinary && row.isBinary && <span className="text-[9px] uppercase tracking-wide opacity-70">binary</span>}
     </Link>
   )
@@ -42,6 +46,19 @@ export function SeriesStrip({ market }: { market: ParsedMarket }) {
   const markets = useMarketStore((s) => s.markets)
   const key = seriesKey(market)
   const series = groupBySeries(markets.filter((m) => seriesKey(m) === key))[0]
+
+  // Keep sibling Yes books live so chips show real mids / "—" for empty books.
+  // The active market's books are owned by MarketPage; skip those here so
+  // our cleanup doesn't tear them down.
+  const siblings = (series?.rows ?? [])
+    .map((r) => r.market.yesCoin)
+    .filter((c) => c !== market.yesCoin && c !== market.noCoin)
+  useEffect(() => {
+    const { subscribeBook, unsubscribeBook } = useOrderBookStore.getState()
+    siblings.forEach(subscribeBook)
+    return () => siblings.forEach(unsubscribeBook)
+  }, [siblings.join(',')])
+
   if (!series || series.rows.length < 2) return null
 
   return (

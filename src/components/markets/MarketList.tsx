@@ -75,6 +75,17 @@ export function MarketList({ category = 'trending' }: { category?: Category }) {
     )
   }, [filtered])
 
+  // Keep the Yes-side book of every listed market live so cards can show
+  // real mids and flag markets nobody has quoted yet (allMids reports a 0.5
+  // placeholder for empty books). One l2Book stream per market — cheap at
+  // today's listing count.
+  const yesCoins = useMemo(() => series.flatMap((s) => s.rows.map((r) => r.market.yesCoin)), [series])
+  useEffect(() => {
+    const { subscribeBook, unsubscribeBook } = useOrderBookStore.getState()
+    yesCoins.forEach(subscribeBook)
+    return () => yesCoins.forEach(unsubscribeBook)
+  }, [yesCoins.join(',')])
+
   if (loading && markets.length === 0) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -108,17 +119,6 @@ export function MarketList({ category = 'trending' }: { category?: Category }) {
       </div>
     )
   }
-
-  // Keep the Yes-side book of every listed market live so cards can show
-  // real mids and flag markets nobody has quoted yet (allMids reports a 0.5
-  // placeholder for empty books). One l2Book stream per market — cheap at
-  // today's listing count.
-  const yesCoins = useMemo(() => series.flatMap((s) => s.rows.map((r) => r.market.yesCoin)), [series])
-  useEffect(() => {
-    const { subscribeBook, unsubscribeBook } = useOrderBookStore.getState()
-    yesCoins.forEach(subscribeBook)
-    return () => yesCoins.forEach(unsubscribeBook)
-  }, [yesCoins.join(',')])
 
   // CSS multi-column gives a masonry-like flow: cards of different heights
   // pack without leaving a tall card's neighbours floating over empty space.

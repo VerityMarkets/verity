@@ -10,7 +10,7 @@ import { ChartHeader } from './charts/ChartHeader'
 import { ChartCountdown } from './charts/ChartCountdown'
 import { parseExpiry, parsePeriodMinutes } from './charts/chartUtils'
 import { formatPriceCents } from '@/lib/marketFormat'
-import { useMarketMid } from '@/hooks/useMarketMid'
+import { useMarketMid, useQuoteState } from '@/hooks/useMarketMid'
 import { VerityWordmark } from '@/components/VerityWordmark'
 import type { ChartType } from './charts/ChartTypeSelector'
 import type { ParsedMarket } from '@/lib/hyperliquid/types'
@@ -155,7 +155,8 @@ function ProbabilityHeader({
 }) {
   const coin = tradeSide === 'yes' ? market.yesCoin : market.noCoin
   const midVal = useMarketMid(coin)
-  const pct = formatPriceCents(midVal)
+  const quote = useQuoteState(coin)
+  const pct = quote.loaded && !quote.quoted ? '—' : formatPriceCents(midVal)
   const isUp = tradeSide === 'yes'
   const direction = isUp ? 'UP' : 'DOWN'
   const dirColor = isUp ? 'text-yes' : 'text-no'

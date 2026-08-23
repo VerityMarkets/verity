@@ -138,6 +138,10 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
   const yesPriceStr = formatFillCents(yesFillPrice, sweepDir)
   const noPriceStr = formatFillCents(noFillPrice, sweepDir)
   const midPriceStr = side === 'yes' ? yesPriceStr : noPriceStr
+  // Nothing to sweep on that side (book loaded, no levels) → don't show a
+  // placeholder price on the pill. Limit entry still works.
+  const yesSideEmpty = !!yesBook && (orderType === 'buy' ? yesBook.asks.length === 0 : yesBook.bids.length === 0)
+  const noSideEmpty = !!noBook && (orderType === 'buy' ? noBook.asks.length === 0 : noBook.bids.length === 0)
 
   // Price in decimal (0-1) — parseFloat so the input accepts decimal cents
   const priceCents = price ? parseFloat(price) : parseFloat(midPriceStr)
@@ -339,7 +343,7 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
               : 'bg-surface-2 text-gray-400 border border-white/5 hover:text-gray-200'
           }`}
         >
-          {market.sideNames[0]} {yesPriceStr}¢
+          {market.sideNames[0]} {yesSideEmpty ? '—' : `${yesPriceStr}¢`}
         </button>
         <button
           onClick={() => { setTradeSide('no'); setPrice(noPriceStr) }}
@@ -349,7 +353,7 @@ export function TradeForm({ market }: { market: ParsedMarket }) {
               : 'bg-surface-2 text-gray-400 border border-white/5 hover:text-gray-200'
           }`}
         >
-          {market.sideNames[1]} {noPriceStr}¢
+          {market.sideNames[1]} {noSideEmpty ? '—' : `${noPriceStr}¢`}
         </button>
       </div>
 

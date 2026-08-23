@@ -17,6 +17,22 @@ export function useMarketMid(coin: string): number {
   return 0.5
 }
 
+/**
+ * Book state for a coin. `loaded` = a snapshot has arrived; `quoted` = at least
+ * one side has levels; `twoSided` = both. Use to avoid showing HL's allMids
+ * placeholder (0.5, or a stale last mid) as if it were a live price.
+ */
+export function useQuoteState(coin: string): { loaded: boolean; quoted: boolean; twoSided: boolean } {
+  const nBids = useOrderBookStore((s) => s.books[coin]?.bids.length)
+  const nAsks = useOrderBookStore((s) => s.books[coin]?.asks.length)
+  const loaded = nBids !== undefined
+  return {
+    loaded,
+    quoted: loaded && ((nBids ?? 0) > 0 || (nAsks ?? 0) > 0),
+    twoSided: (nBids ?? 0) > 0 && (nAsks ?? 0) > 0,
+  }
+}
+
 /** Non-reactive variant for event handlers / effects. */
 export function getMarketMid(coin: string): number {
   const book = useOrderBookStore.getState().books[coin]
