@@ -124,7 +124,7 @@ function BucketBar({ rows }: { rows: SeriesRow[] }) {
               // labels) over its range colour instead of printing a value.
               ...(known[i]
                 ? {}
-                : { backgroundImage: 'repeating-linear-gradient(-45deg, rgba(156,163,175,0.6) 0 2px, transparent 2px 7px)' }),
+                : { backgroundImage: 'repeating-linear-gradient(-45deg, rgba(156,163,175,0.3) 0 2px, transparent 2px 7px)' }),
             }}
             title={known[i] ? undefined : 'No quotes yet'}
           >
