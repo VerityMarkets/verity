@@ -102,7 +102,7 @@ function BucketBar({ rows }: { rows: SeriesRow[] }) {
   const pcts = shares.map((v) => (v / total) * 100)
   const colors = ['bg-no/60', 'bg-amber-400/70', 'bg-yes/60', 'bg-blue-400/60', 'bg-purple-400/60']
   // same hues, dimmed fill for unpriced buckets (text stays full strength)
-  const dimColors = ['bg-no/25', 'bg-amber-400/30', 'bg-yes/25', 'bg-blue-400/25', 'bg-purple-400/25']
+  const dimColors = ['bg-no/40', 'bg-amber-400/45', 'bg-yes/40', 'bg-blue-400/40', 'bg-purple-400/40']
   // boundary positions (cumulative %) and the threshold each marks
   const bounds: { left: number; label: string }[] = []
   let acc = 0
@@ -117,9 +117,7 @@ function BucketBar({ rows }: { rows: SeriesRow[] }) {
         {pcts.map((p, i) => (
           <div
             key={i}
-            className={`${known[i] ? colors[i % colors.length] : dimColors[i % dimColors.length]} flex items-center justify-center overflow-hidden ${
-              known[i] ? 'text-gray-950/80' : 'text-gray-200'
-            }`}
+            className={`${known[i] ? colors[i % colors.length] : dimColors[i % dimColors.length]} flex items-center justify-center overflow-hidden text-gray-950/80`}
             style={{ width: `${p}%` }}
             title={known[i] ? undefined : 'No quotes yet'}
           >
